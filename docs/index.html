@@ -95,7 +95,6 @@ th { color: var(--ink2); font-weight: 600; }
 .pnum { position: absolute; left: 0; top: 0; width: max-content; font-size: 11px; font-weight: 700; line-height: 1; pointer-events: none; transform: translate(-50%, -50%); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .maplegend .dot { display: inline-block; border-radius: 50%; border: 1.5px solid var(--muted); vertical-align: middle; }
 #map { height: 480px; border-radius: 8px; background: var(--page); z-index: 0; }
-}
 .leaflet-container { font: inherit; }
 .leaflet-container .leaflet-control-attribution { font-size: 10px; }
 .plabel { white-space: nowrap; font-size: 12px; line-height: 1.25; color: #0b0b0b; pointer-events: none;
@@ -124,6 +123,21 @@ footer p { margin: 4px 0; }
   .mapinfo .t { font-size: 13px; margin-bottom: 1px; }
   .mapinfo .r, .mapinfo .d { display: none; }
   .mapinfo .c { display: block; }
+}
+.tabs { display: inline-flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
+.tabs button { border: 0; border-radius: 0; background: var(--surface); padding: 8px 18px; color: var(--ink2); font-size: 14px; }
+.tabs button.on { background: var(--ink); color: var(--surface); font-weight: 600; }
+.maphead .seg button { padding: 6px 12px; font-size: 13px; }
+.maphead select { padding: 5px 8px; font-size: 13px; }
+.who select { padding: 7px 6px; border: 0; border-radius: 0; background: transparent; font-size: 15px; }
+.who select + select { border-left: 1px solid var(--border); }
+.heatlegend { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink2); margin-top: 6px; }
+.heatlegend i { display: inline-block; width: 110px; height: 8px; border-radius: 4px; }
+svg .hl { fill: var(--ink); font-weight: 650; }
+.rank th[data-k] { cursor: pointer; user-select: none; }
+.rank th.sorted { color: var(--ink); }
+.pill { display: inline-block; padding: 1px 8px; border-radius: 999px; background: color-mix(in srgb, var(--s1) 14%, transparent); color: var(--ink); font-weight: 600; }
+[hidden] { display: none !important; }
 </style>
 </head>
 <body>
@@ -148,63 +162,95 @@ footer p { margin: 4px 0; }
         <button id="hNext" type="button" aria-label="한 시간 뒤">›</button>
       </div>
     </div>
-  </div>
-  </div>
-
-  <section class="card mapcard">
-    <div class="maphead">
-      <div class="seg" role="group" aria-label="지역 단위"><button id="kPlace" type="button">주요지역</button><button id="kDong" type="button">행정동</button></div>
-      <div class="maplegend">
-        <span><i class="dot" style="width:8px;height:8px"></i> <i class="dot" style="width:16px;height:16px"></i> 원 크기 = 인구</span>
-        <span>색·숫자 = 여성 비율</span>
-        <span>낮음 <span class="scale" id="scale"></span> 높음</span>
+    <div class="field"><span>누가</span>
+      <div class="step who">
+        <select id="sex" aria-label="성별">
+          <option value="all">성별 전체</option><option value="f">여성</option><option value="m">남성</option>
+        </select>
+        <select id="age" aria-label="연령대"></select>
       </div>
     </div>
-    <div id="map" aria-label="주요지역 지도. 같은 내용은 아래 지역 비교 표에서도 볼 수 있습니다."></div>
-  </section>
-
-  <div class="tiles" id="tiles"></div>
-
-  <div class="cards">
-    <section class="card wide">
-      <h2>시간대별 생활인구</h2>
-      <p class="desc" id="hourDesc"></p>
-      <div class="legend" id="hourLegend"></div>
-      <div id="hourChart"></div>
-    </section>
-    <section class="card">
-      <h2>시간대별 여성 비율</h2>
-      <p class="desc">50% 선보다 위면 여성이, 아래면 남성이 더 많습니다.</p>
-      <div id="sexChart"></div>
-    </section>
-    <section class="card">
-      <h2>연령대별 인구</h2>
-      <div class="hourpick"><span id="hourLabel"></span><input type="range" id="hour" min="0" max="23" step="1" aria-label="시간 선택"></div>
-      <div class="legend"><span><i class="box" style="background:var(--s1)"></i>남성</span><span><i class="box" style="background:var(--s2)"></i>여성</span></div>
-      <div id="ageChart"></div>
-    </section>
-    <section class="card wide">
-      <h2 id="dayTitle">날짜별 19시 인구</h2>
-      <p class="desc">위에서 고른 기준 시각의 인구입니다. 큰 점이 지금 보고 있는 날짜이고, 그래프를 누르면 그 날짜로 이동합니다.</p>
-      <div id="dayChart"></div>
-    </section>
   </div>
 
-  <section class="card" style="margin-top:12px">
-    <h2 id="rankTitle">지역 비교</h2>
-    <p class="desc" id="rankDesc"></p>
-    <div class="tablewrap" id="rank"></div>
-  </section>
+  <div class="tabs" role="tablist">
+    <button id="tabNowBtn" type="button" role="tab">지도·현황</button>
+    <button id="tabTrendBtn" type="button" role="tab">추이</button>
+  </div>
 
-  <details>
-    <summary>선택한 지역의 시간대별 표</summary>
-    <div class="tablewrap" id="table"></div>
-  </details>
+  <div id="tabNow">
+    <section class="card mapcard">
+      <div class="maphead">
+        <div class="seg" role="group" aria-label="지역 단위"><button id="kPlace" type="button">주요지역</button><button id="kDong" type="button">행정동</button></div>
+        <label>색 <select id="color"></select></label>
+        <div class="seg" role="group" aria-label="원 크기 기준" id="sizeSeg"><button id="zPop" type="button">원 크기: 인구</button><button id="zDens" type="button">밀도</button></div>
+        <div class="maplegend" id="maplegend"></div>
+      </div>
+      <div id="map" aria-label="주요지역 지도. 같은 내용은 아래 지역 비교 표에서도 볼 수 있습니다."></div>
+    </section>
+
+    <div class="tiles" id="tiles"></div>
+
+    <div class="cards">
+      <section class="card wide">
+        <h2 id="hourTitle">시간대별 생활인구</h2>
+        <p class="desc" id="hourDesc"></p>
+        <div class="legend" id="hourLegend"></div>
+        <div id="hourChart"></div>
+      </section>
+      <section class="card wide">
+        <h2>누가 언제 많은가</h2>
+        <p class="desc">가로는 시간, 세로는 성·연령대입니다. 색이 진할수록 사람이 많습니다. 칸을 누르면 그 시각과 대상으로 바뀝니다.</p>
+        <div id="groupHeat"></div>
+      </section>
+      <section class="card">
+        <h2>시간대별 여성 비율</h2>
+        <p class="desc">50% 선보다 위면 여성이, 아래면 남성이 더 많습니다.</p>
+        <div id="sexChart"></div>
+      </section>
+      <section class="card">
+        <h2>연령대별 인구</h2>
+        <div class="hourpick"><span id="hourLabel"></span><input type="range" id="hour" min="0" max="23" step="1" aria-label="시간 선택"></div>
+        <div class="legend"><span><i class="box" style="background:var(--s1)"></i>남성</span><span><i class="box" style="background:var(--s2)"></i>여성</span><span>막대를 누르면 그 대상으로 바뀝니다</span></div>
+        <div id="ageChart"></div>
+      </section>
+    </div>
+
+    <section class="card" style="margin-top:12px">
+      <h2 id="rankTitle">지역 비교</h2>
+      <p class="desc" id="rankDesc"></p>
+      <div class="tablewrap" id="rank"></div>
+    </section>
+
+    <details>
+      <summary>선택한 지역의 시간대별 표</summary>
+      <div class="tablewrap" id="table"></div>
+    </details>
+  </div>
+
+  <div id="tabTrend" hidden>
+    <div class="cards">
+      <section class="card wide">
+        <h2 id="dayTitle">날짜별 인구</h2>
+        <p class="desc">위에서 고른 기준 시각의 값입니다. 큰 점이 지금 보고 있는 날짜이고, 그래프를 누르면 그 날짜로 이동합니다.</p>
+        <div id="dayChart"></div>
+      </section>
+      <section class="card wide">
+        <h2 id="dowTitle">요일별 평균 흐름</h2>
+        <p class="desc" id="dowDesc"></p>
+        <div id="dowHeat"></div>
+      </section>
+      <section class="card wide">
+        <h2 id="calTitle">날짜 × 시간</h2>
+        <p class="desc" id="calDesc"></p>
+        <div id="calHeat"></div>
+      </section>
+    </div>
+  </div>
 
   <footer>
     <p>출처: 서울 열린데이터광장(서울특별시), 서울 생활인구(250m) 내국인. 공공누리 제1유형.</p>
     <p>지도: © OpenStreetMap contributors. 행정동 경계: vuski/admdongkor.</p>
-    <p>내국인만 집계된 추계 인구이며 약 4일 늦게 공개됩니다. 주요지역 수치는 중심점 주변 250m 격자 1~4개를 합친 값이라 특정 거리만의 수치는 아닙니다.</p>
+    <p>내국인만 집계된 추계 인구이며 약 4일 늦게 공개됩니다. 주요지역 수치는 중심점 주변 250m 격자 1~4개를 합친 값이라 특정 거리만의 수치는 아닙니다. 밀도는 가로세로 100m 넓이(1ha)당 인구입니다.</p>
   </footer>
 </main>
 <script src="vendor/leaflet.js"></script>
@@ -213,17 +259,22 @@ footer p { margin: 4px 0; }
 <script>
 const AGES = ['00','10','15','20','25','30','35','40','45','50','55','60','65','70'];
 const BANDS = [['19세 이하',['00','10','15']],['20대',['20','25']],['30대',['30','35']],['40대',['40','45']],['50대',['50','55']],['60세 이상',['60','65','70']]];
+const SEXES = { m: '남성', f: '여성' };
 const DOW = ['일','월','화','수','목','금','토'];
 const $ = (id) => document.getElementById(id);
 const fmt = (n) => Math.round(n).toLocaleString('ko-KR');
 const pct = (n) => n.toFixed(1) + '%';
+const signed = (n, d = 1) => (n >= 0 ? '+' : '−') + Math.abs(n).toFixed(d) + '%';
 const ymdDash = (s) => s.slice(0,4) + '-' + s.slice(4,6) + '-' + s.slice(6);
 const dowOf = (s) => new Date(ymdDash(s) + 'T00:00:00').getDay();
 const dateLabel = (s) => `${+s.slice(4,6)}월 ${+s.slice(6)}일(${DOW[dowOf(s)]})`;
+const DARK = matchMedia('(prefers-color-scheme: dark)').matches;
 
 const store = {};   // areaId -> { ymd -> [24 rows|undefined] }
-let areas = [], dongShapes = {}, state = { area: null, date: null, hour: 19 };
+let areas = [], dongShapes = {};
+const state = { area: null, date: null, hour: 19, sex: 'all', age: 'all', color: 'fem', size: 'pop', sort: 'pop', tab: 'now' };
 
+// ---------- 데이터 ----------
 function parseCsv(text) {
   const lines = text.trim().split('\n');
   const head = lines[0].split(',');
@@ -238,6 +289,20 @@ function parseCsv(text) {
   });
 }
 function put(id, row) { ((store[id] ??= {})[row.ymd] ??= [])[row.tt] = row; }
+// 위경도 다각형의 넓이(ha). 서울 범위에서는 평면 근사로 충분하다.
+function polyHa(polys) {
+  let m2 = 0;
+  for (const poly of polys) poly.forEach((ring, ri) => {
+    const k = Math.cos((ring[0][0] * Math.PI) / 180) * 111320;
+    let a = 0;
+    for (let i = 0; i < ring.length; i++) {
+      const [la1, lo1] = ring[i], [la2, lo2] = ring[(i + 1) % ring.length];
+      a += lo1 * k * la2 * 110540 - lo2 * k * la1 * 110540;
+    }
+    m2 += (ri === 0 ? 1 : -1) * Math.abs(a) / 2;
+  });
+  return m2 / 10000;
+}
 async function load() {
   const get = (f) => fetch('data/' + f, { cache: 'no-cache' }).then((r) => (r.ok ? r.text() : ''));
   const [cfg, idxText, geo] = await Promise.all([get('areas.json'), get('index.json'), get('dongs.geojson')]);
@@ -246,8 +311,9 @@ async function load() {
   // 종류별로 최근 3개월 파일만 읽는다 (같은 요일 평균을 내기에 충분한 기간)
   const files = ['place', 'dong'].flatMap((k) => (idx[k]?.months || []).slice(-3).map((m) => `${k}/${m}.csv`));
   (await Promise.all(files.map(get))).forEach((t) => t && parseCsv(t).forEach((r) => put(r.id, r)));
-  const places = a.places.filter((x) => store[x.id]).map((x) => ({ ...x, kind: 'place' }));
-  const dongs = a.dongs.filter((x) => store[x.id]).map((x) => ({ ...x, kind: 'dong', label: `${x.label} (${x.near.join(', ')})` }));
+  // 넓이: 주요지역은 격자(250m × 250m = 6.25ha) 수, 행정동은 경계 다각형에서 계산
+  const places = a.places.filter((x) => store[x.id]).map((x) => ({ ...x, kind: 'place', ha: x.cells.length * 6.25 }));
+  const dongs = a.dongs.filter((x) => store[x.id]).map((x) => ({ ...x, kind: 'dong', label: `${x.label} (${x.near.join(', ')})`, ha: dongShapes[x.id] ? polyHa(dongShapes[x.id]) : null }));
   areas = [...places, ...dongs];
   const opts = (list) => list.map((x) => `<option value="${x.id}">${x.label}</option>`).join('');
   $('area').innerHTML = `<optgroup label="주요지역 중심 (250m 격자 묶음)">${opts(places)}</optgroup><optgroup label="주요지역이 속한 행정동 전체">${opts(dongs)}</optgroup>`;
@@ -255,15 +321,50 @@ async function load() {
     ? `마지막 수집 ${new Date(idx.updatedAt).toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'short' })} · 주요지역 ${idx.place?.days ?? 0}일 치, 행정동 ${idx.dong?.days ?? 0}일 치 보관 중`
     : '';
   $('mapHour').innerHTML = Array.from({ length: 24 }, (_, h) => `<option value="${h}">${h}시</option>`).join('');
+  $('age').innerHTML = '<option value="all">연령 전체</option>' + BANDS.map(([n], i) => `<option value="${i}">${n}</option>`).join('');
   state.area = areas[0]?.id;
   state.date = dates().at(-1);
   initMap();
   render();
 }
 
-const dates = () => Object.keys(store[state.area] || {}).sort();
-const day = (ymd) => (store[state.area]?.[ymd] || []);
-const peakOf = (rows) => rows.reduce((b, r) => (r && (!b || r.spop > b.spop) ? r : b), null);
+const cur = () => areas.find((x) => x.id === state.area);
+const dates = (id = state.area) => Object.keys(store[id] || {}).sort();
+const day = (ymd, id = state.area) => (store[id]?.[ymd] || []);
+const peakOf = (rows) => rows.reduce((b, r) => (r && (!b || val(r) > val(b)) ? r : b), null);
+
+// ---------- "누가": 선택한 성·연령 집단 ----------
+const hasTarget = () => state.sex !== 'all' || state.age !== 'all';
+function targetLabel() {
+  if (!hasTarget()) return '전체';
+  return [state.age === 'all' ? '' : BANDS[state.age][0], state.sex === 'all' ? '' : SEXES[state.sex]].filter(Boolean).join(' ');
+}
+const popLabel = () => (hasTarget() ? `${targetLabel()} 인구` : '인구');
+const groupVal = (r, sex, bi) => BANDS[bi][1].reduce((s, k) => s + (r.age[sex + k] || 0), 0);
+// 한 행에서 선택한 집단의 인구
+function val(r) {
+  if (!hasTarget()) return r.spop;
+  const sexes = state.sex === 'all' ? ['m', 'f'] : [state.sex];
+  const bands = state.age === 'all' ? BANDS.map((_, i) => i) : [+state.age];
+  let s = 0;
+  for (const x of sexes) for (const b of bands) s += groupVal(r, x, b);
+  return s;
+}
+// 같은 요일인 다른 날짜들의 평균 (선택한 집단 기준)
+function weekdayAvg(id, ymd, h) {
+  const v = dates(id).filter((d) => d !== ymd && dowOf(d) === dowOf(ymd)).map((d) => store[id][d][h]).filter(Boolean).map(val);
+  return v.length ? { avg: v.reduce((a, b) => a + b, 0) / v.length, n: v.length } : null;
+}
+// 한 지역의 요약값
+function metrics(x, ymd = state.date, h = state.hour) {
+  const r = store[x.id]?.[ymd]?.[h];
+  if (!r || !(r.m + r.f > 0)) return null;
+  const tot = r.m + r.f, v = val(r), band = (i) => ((groupVal(r, 'm', i) + groupVal(r, 'f', i)) / tot) * 100;
+  const base = weekdayAvg(x.id, ymd, h);
+  return { r, v, all: r.spop, share: (v / (hasTarget() ? tot : r.spop)) * 100, fem: (r.f / tot) * 100, a20: band(1), a30: band(2), young: band(1) + band(2),
+    diff: base && base.avg > 0 ? (v / base.avg - 1) * 100 : null, n: base?.n || 0, avg: base?.avg ?? null, dens: x.ha ? v / x.ha : null };
+}
+const densFmt = (d) => (d == null ? '—' : (d >= 100 ? fmt(d) : d.toFixed(1)) + '명/ha');
 
 // ---------- 차트 공통 ----------
 const NS = 'http://www.w3.org/2000/svg';
@@ -291,7 +392,7 @@ function showTip(ev, html) {
   tip.style.left = x + 'px'; tip.style.top = y + 'px';
 }
 const hideTip = () => (tip.style.display = 'none');
-const tipRow = (color, name, val) => `<div class="r"><span>${color ? `<i style="background:${color}"></i>` : ''}${name}</span><b>${val}</b></div>`;
+const tipRow = (color, name, v) => `<div class="r"><span>${color ? `<i style="background:${color}"></i>` : ''}${name}</span><b>${v}</b></div>`;
 
 function frame(host, { W = 720, H = 260, ml = 52, mr = 16, mt = 12, mb = 28 } = {}) {
   host.innerHTML = '';
@@ -342,79 +443,111 @@ function crosshair(f, xs, onMove, onClick) {
   if (onClick) { hit.style.cursor = 'pointer'; hit.addEventListener('click', (ev) => onClick(nearest(ev))); }
 }
 
-// ---------- 화면 ----------
-function baseline(ymd) {
-  // 같은 요일의 다른 날짜 평균
-  const others = dates().filter((d) => d !== ymd && dowOf(d) === dowOf(ymd));
-  if (!others.length) return null;
-  const avg = [];
-  for (let h = 0; h < 24; h++) {
-    const v = others.map((d) => day(d)[h]?.spop).filter((x) => x != null);
-    avg[h] = v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
-  }
-  return { avg, n: others.length };
+// 히트맵: 한 가지 색의 밝기로 크기를 나타낸다. rows = [{ label, cells: [값|null × 24], strong }]
+const HEAT = DARK ? { lo: [31, 42, 56], hi: [134, 182, 239] } : { lo: [230, 240, 253], hi: [16, 66, 129] };
+const heatColor = (t) => `rgb(${HEAT.lo.map((v, i) => Math.round(v + (HEAT.hi[i] - v) * t)).join(',')})`;
+function heat(host, { rows, rowH = 20, labelW = 84, gaps = [], selCol = null, unit = '명', tipHtml, onClick }) {
+  const max = Math.max(0, ...rows.flatMap((r) => r.cells.map((v) => v || 0)));
+  if (!rows.length || !(max > 0)) return (host.innerHTML = '<p class="empty">표시할 데이터가 없습니다.</p>');
+  const gapH = 8, H = rows.length * rowH + gaps.length * gapH + 4 + 24;
+  const f = frame(host, { H, ml: labelW, mr: 6, mt: 4, mb: 24 });
+  const cw = (f.x1 - f.x0) / 24, pad = rowH >= 16 ? 1 : 0.5;
+  let y = f.y0;
+  const tops = rows.map((r, i) => { if (gaps.includes(i)) y += gapH; const t = y; y += rowH; return t; });
+  rows.forEach((r, i) => {
+    el('text', { x: f.x0 - 8, y: tops[i] + rowH / 2 + 4, 'text-anchor': 'end', ...(r.strong ? { class: 'hl' } : {}) }, f.svg).textContent = r.label;
+    r.cells.forEach((v, h) => {
+      const rect = el('rect', { x: f.x0 + h * cw + pad, y: tops[i] + pad, width: Math.max(1, cw - 2 * pad), height: rowH - 2 * pad, rx: Math.min(3, rowH / 5),
+        fill: v == null ? 'var(--grid)' : heatColor(v / max), 'data-i': i, 'data-h': h }, f.svg);
+      if (v == null) rect.setAttribute('opacity', 0.35);
+    });
+  });
+  for (let h = 0; h < 24; h += 3) el('text', { x: f.x0 + (h + 0.5) * cw, y: y + 16, 'text-anchor': 'middle' }, f.svg).textContent = h + '시';
+  if (selCol != null) el('rect', { x: f.x0 + selCol * cw, y: f.y0 - 1, width: cw, height: y - f.y0 + 2, fill: 'none', stroke: 'var(--ink)', 'stroke-width': 1.5, rx: 3, 'pointer-events': 'none' }, f.svg);
+  const at = (ev) => { const t = ev.target; return t.dataset?.i != null ? [+t.dataset.i, +t.dataset.h] : null; };
+  f.svg.addEventListener('pointermove', (ev) => { const c = at(ev); if (!c || rows[c[0]].cells[c[1]] == null) return hideTip(); showTip(ev, tipHtml(c[0], c[1], rows[c[0]].cells[c[1]])); });
+  f.svg.addEventListener('pointerleave', hideTip);
+  if (onClick) { f.svg.style.cursor = 'pointer'; f.svg.addEventListener('click', (ev) => { const c = at(ev); if (c) onClick(c[0], c[1]); }); }
+  const lg = document.createElement('div'); lg.className = 'heatlegend';
+  lg.innerHTML = `<span>적음</span><i style="background:linear-gradient(90deg, ${heatColor(0)}, ${heatColor(1)})"></i><span>많음 (가장 진한 칸 ${fmt(max)}${unit})</span>`;
+  host.appendChild(lg);
 }
 
+// ---------- 화면 ----------
 function render() {
   const ds = dates();
   if (!ds.includes(state.date)) state.date = ds.at(-1);
-  const rows = day(state.date), peak = peakOf(rows), base = baseline(state.date);
+  const x = cur(), rows = day(state.date), H = state.hour;
   $('area').value = state.area;
   $('date').min = ymdDash(ds[0]); $('date').max = ymdDash(ds.at(-1)); $('date').value = ymdDash(state.date);
   const i = ds.indexOf(state.date);
   $('prev').disabled = i <= 0; $('next').disabled = i >= ds.length - 1;
   const w = dowOf(state.date);
   $('dow').textContent = DOW[w] + '요일'; $('dow').className = 'dow' + (w === 6 ? ' sat' : w === 0 ? ' sun' : '');
-  $('hPrev').disabled = state.hour <= 0; $('hNext').disabled = state.hour >= 23;
+  $('hPrev').disabled = H <= 0; $('hNext').disabled = H >= 23;
+  $('mapHour').value = H; $('sex').value = state.sex; $('age').value = state.age;
+  $('tabNowBtn').classList.toggle('on', state.tab === 'now'); $('tabTrendBtn').classList.toggle('on', state.tab === 'trend');
+  $('tabNow').hidden = state.tab !== 'now'; $('tabTrend').hidden = state.tab !== 'trend';
+
+  if (state.tab === 'trend') { drawDays(ds); drawDowHeat(ds); drawCalHeat(ds); return; }
 
   // 요약 타일
-  const tiles = [], H = state.hour, ref = rows[H];
-  $('mapHour').value = H;
-  if (ref) {
-    tiles.push([`${H}시 인구`, fmt(ref.spop) + '명', dateLabel(state.date)]);
-    const b = base?.avg[H];
-    if (b) {
-      const diff = (ref.spop / b - 1) * 100;
-      tiles.push([`${DOW[dowOf(state.date)]}요일 평균 대비`, (diff >= 0 ? '+' : '−') + Math.abs(diff).toFixed(1) + '%', `같은 요일 ${base.n}일 평균 ${fmt(b)}명 (${H}시)`]);
-    } else tiles.push(['같은 요일 평균 대비', '—', '비교할 같은 요일 데이터가 아직 없습니다']);
-    tiles.push([`${H}시 여성 비율`, pct((ref.f / (ref.m + ref.f)) * 100), `남성 ${fmt(ref.m)}명 · 여성 ${fmt(ref.f)}명`]);
-    const young = ['20', '25', '30', '35'].reduce((t, k) => t + (ref.age['m' + k] || 0) + (ref.age['f' + k] || 0), 0);
-    tiles.push([`${H}시 20·30대 비중`, pct((young / (ref.m + ref.f)) * 100), peak ? `참고: 하루 최대는 ${peak.tt}시 ${fmt(peak.spop)}명` : '']);
+  const m = metrics(x), tiles = [];
+  if (m) {
+    tiles.push([`${H}시 ${popLabel()}`, fmt(m.v) + '명', hasTarget() ? `${dateLabel(state.date)} · 전체 ${fmt(m.all)}명 중 ${pct(m.share)}` : dateLabel(state.date)]);
+    tiles.push(m.diff != null
+      ? [`${DOW[w]}요일 평균 대비`, signed(m.diff), `같은 요일 ${m.n}일 평균 ${fmt(m.avg)}명 (${H}시)`]
+      : ['같은 요일 평균 대비', '—', '비교할 같은 요일 데이터가 아직 없습니다']);
+    tiles.push([`${H}시 밀도`, densFmt(m.dens), x.ha ? `가로세로 100m당 인구 · 넓이 ${x.ha >= 100 ? fmt(x.ha) : x.ha.toFixed(1)}ha` + (x.kind === 'place' ? ` (격자 ${x.cells.length}개)` : '') : '']);
+    tiles.push([`${H}시 여성 비율`, pct(m.fem), `남성 ${fmt(m.r.m)}명 · 여성 ${fmt(m.r.f)}명 · 20·30대 ${pct(m.young)}`]);
   }
   $('tiles').innerHTML = tiles.map(([k, v, n]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="n">${n}</div></div>`).join('');
 
-  drawHour(rows, base, peak);
+  drawHour(rows);
+  drawGroupHeat(rows);
   drawSex(rows);
   drawAge(rows);
-  drawDays(ds);
-  drawTable(rows, base);
+  drawTable(rows);
   drawRank();
   drawMap();
 }
 
-function drawHour(rows, base, peak) {
-  const host = $('hourChart');
-  $('hourDesc').textContent = base ? `${dateLabel(state.date)}과 다른 ${DOW[dowOf(state.date)]}요일 ${base.n}일의 평균을 비교합니다.` : `${dateLabel(state.date)} 하루의 흐름입니다. 같은 요일 데이터가 쌓이면 평균선이 함께 표시됩니다.`;
-  $('hourLegend').innerHTML = `<span><i style="border-color:var(--s1)"></i>${dateLabel(state.date)}</span>` + (base ? `<span><i class="dash" style="border-color:var(--ref)"></i>${DOW[dowOf(state.date)]}요일 평균 (${base.n}일)</span>` : '');
-  if (!peak) return (host.innerHTML = '<p class="empty">이 날짜의 데이터가 없습니다.</p>');
+function drawHour(rows) {
+  const host = $('hourChart'), vals = Array.from({ length: 24 }, (_, h) => (rows[h] ? val(rows[h]) : null));
+  const base = Array.from({ length: 24 }, (_, h) => weekdayAvg(state.area, state.date, h)), n = base.find(Boolean)?.n || 0;
+  $('hourTitle').textContent = `시간대별 ${popLabel()}`;
+  $('hourDesc').textContent = n ? `${dateLabel(state.date)}과 다른 ${DOW[dowOf(state.date)]}요일 ${n}일의 평균을 비교합니다.` : `${dateLabel(state.date)} 하루의 흐름입니다. 같은 요일 데이터가 쌓이면 평균선이 함께 표시됩니다.`;
+  $('hourLegend').innerHTML = `<span><i style="border-color:var(--s1)"></i>${dateLabel(state.date)}</span>` + (n ? `<span><i class="dash" style="border-color:var(--ref)"></i>${DOW[dowOf(state.date)]}요일 평균 (${n}일)</span>` : '');
+  if (vals.every((v) => v == null)) return (host.innerHTML = '<p class="empty">이 날짜의 데이터가 없습니다.</p>');
   const f = frame(host);
-  const ticks = niceTicks(Math.max(peak.spop, ...(base ? base.avg.map((v) => v || 0) : [0])));
+  const ticks = niceTicks(Math.max(...vals.map((v) => v || 0), ...base.map((b) => b?.avg || 0)));
   const y = yAxis(f, 0, ticks.at(-1), ticks, fmt), x = hourAxis(f);
-  if (base) path(f, base.avg.map((v, h) => (v == null ? null : [x(h), y(v)])), 'var(--ref)', true);
-  path(f, Array.from({ length: 24 }, (_, h) => (rows[h] ? [x(h), y(rows[h].spop)] : null)), 'var(--s1)');
-  const sel = rows[state.hour];
-  if (sel) {
-    el('line', { x1: x(sel.tt), x2: x(sel.tt), y1: f.y0, y2: f.y1, stroke: 'var(--axis)', 'stroke-width': 1, 'stroke-dasharray': '3 3' }, f.svg);
-    el('circle', { cx: x(sel.tt), cy: y(sel.spop), r: 4, fill: 'var(--s1)', stroke: 'var(--surface)', 'stroke-width': 2 }, f.svg);
-    const anchor = sel.tt > 19 ? 'end' : sel.tt < 4 ? 'start' : 'middle';
-    el('text', { x: x(sel.tt), y: y(sel.spop) - 10, 'text-anchor': anchor, class: 'lbl' }, f.svg).textContent = `${sel.tt}시 ${fmt(sel.spop)}명`;
+  if (n) path(f, base.map((b, h) => (b ? [x(h), y(b.avg)] : null)), 'var(--ref)', true);
+  path(f, vals.map((v, h) => (v == null ? null : [x(h), y(v)])), 'var(--s1)');
+  const H = state.hour;
+  if (vals[H] != null) {
+    el('line', { x1: x(H), x2: x(H), y1: f.y0, y2: f.y1, stroke: 'var(--axis)', 'stroke-width': 1, 'stroke-dasharray': '3 3' }, f.svg);
+    el('circle', { cx: x(H), cy: y(vals[H]), r: 4, fill: 'var(--s1)', stroke: 'var(--surface)', 'stroke-width': 2 }, f.svg);
+    el('text', { x: x(H), y: y(vals[H]) - 10, 'text-anchor': H > 19 ? 'end' : H < 4 ? 'start' : 'middle', class: 'lbl' }, f.svg).textContent = `${H}시 ${fmt(vals[H])}명`;
   }
   crosshair(f, Array.from({ length: 24 }, (_, h) => x(h)), (h) => {
-    const r = rows[h]; if (!r) return null;
-    const b = base?.avg[h];
-    return { marks: [[y(r.spop), 'var(--s1)'], ...(b != null ? [[y(b), 'var(--ref)']] : [])],
-      html: `<b>${h}시</b>` + tipRow('var(--s1)', dateLabel(state.date), fmt(r.spop) + '명') + (b != null ? tipRow('var(--ref)', '요일 평균', fmt(b) + '명') + tipRow('', '차이', ((r.spop / b - 1) * 100 >= 0 ? '+' : '−') + Math.abs((r.spop / b - 1) * 100).toFixed(1) + '%') : '') };
+    if (vals[h] == null) return null;
+    const b = base[h]?.avg;
+    return { marks: [[y(vals[h]), 'var(--s1)'], ...(b != null ? [[y(b), 'var(--ref)']] : [])],
+      html: `<b>${h}시 · ${targetLabel()}</b>` + tipRow('var(--s1)', dateLabel(state.date), fmt(vals[h]) + '명') + (b ? tipRow('var(--ref)', '요일 평균', fmt(b) + '명') + tipRow('', '차이', signed((vals[h] / b - 1) * 100)) : '') };
   }, (h) => { state.hour = h; render(); });
+}
+
+// 시간 × 성·연령 히트맵
+function drawGroupHeat(rows) {
+  const groups = ['m', 'f'].flatMap((s) => BANDS.map((b, i) => ({ s, i, label: `${SEXES[s]} ${b[0]}` })));
+  const picked = (g) => hasTarget() && (state.sex === 'all' || state.sex === g.s) && (state.age === 'all' || +state.age === g.i);
+  heat($('groupHeat'), {
+    rows: groups.map((g) => ({ label: g.label, strong: picked(g), cells: Array.from({ length: 24 }, (_, h) => (rows[h] ? groupVal(rows[h], g.s, g.i) : null)) })),
+    gaps: [BANDS.length], labelW: 96, selCol: state.hour,
+    tipHtml: (i, h, v) => `<b>${groups[i].label} · ${h}시</b>` + tipRow('', '인구', fmt(v) + '명') + tipRow('', '그 시각 전체 중', pct((v / (rows[h].m + rows[h].f)) * 100)),
+    onClick: (i, h) => { state.hour = h; state.sex = groups[i].s; state.age = String(groups[i].i); render(); },
+  });
 }
 
 function drawSex(rows) {
@@ -439,7 +572,7 @@ function drawAge(rows) {
   $('hour').value = state.hour;
   $('hourLabel').textContent = `${state.hour}시 기준`;
   if (!r) return (host.innerHTML = '<p class="empty">데이터가 없습니다.</p>');
-  const bands = BANDS.map(([name, keys]) => ({ name, m: keys.reduce((s, k) => s + (r.age['m' + k] || 0), 0), f: keys.reduce((s, k) => s + (r.age['f' + k] || 0), 0) }));
+  const bands = BANDS.map(([name], i) => ({ name, m: groupVal(r, 'm', i), f: groupVal(r, 'f', i) }));
   const f = frame(host, { W: 520, H: 222, ml: 48 });
   const ticks = niceTicks(Math.max(...bands.flatMap((b) => [b.m, b.f])));
   const y = yAxis(f, 0, ticks.at(-1), ticks, fmt);
@@ -448,69 +581,100 @@ function drawAge(rows) {
     const cx = f.x0 + slot * (i + .5);
     [['m', 'var(--s1)', cx - bw - 1], ['f', 'var(--s2)', cx + 1]].forEach(([k, c, bx]) => {
       const top = y(b[k]), h = f.y1 - top, rr = Math.min(4, h);
-      el('path', { d: `M${bx} ${f.y1}V${top + rr}q0 ${-rr} ${rr} ${-rr}h${bw - 2 * rr}q${rr} 0 ${rr} ${rr}V${f.y1}Z`, fill: c }, f.svg);
+      const on = hasTarget() && (state.sex === 'all' || state.sex === k) && (state.age === 'all' || +state.age === i);
+      el('path', { d: `M${bx} ${f.y1}V${top + rr}q0 ${-rr} ${rr} ${-rr}h${bw - 2 * rr}q${rr} 0 ${rr} ${rr}V${f.y1}Z`, fill: c, opacity: !hasTarget() || on ? 1 : 0.3 }, f.svg);
+      // 막대 하나를 누르면 그 성·연령이 "누가"로 선택된다
+      const hit = el('rect', { x: bx - 1, y: f.y0, width: bw + 2, height: f.y1 - f.y0, fill: 'transparent', style: 'cursor:pointer' }, f.svg);
+      hit.addEventListener('pointermove', (ev) => showTip(ev, `<b>${b.name} · ${state.hour}시</b>` + tipRow('var(--s1)', '남성', fmt(b.m) + '명') + tipRow('var(--s2)', '여성', fmt(b.f) + '명') + tipRow('', '전체 중 비중', pct(((b.m + b.f) / (r.m + r.f)) * 100))));
+      hit.addEventListener('pointerleave', hideTip);
+      hit.addEventListener('click', () => { state.sex = k; state.age = String(i); render(); });
     });
     el('text', { x: cx, y: f.y1 + 18, 'text-anchor': 'middle' }, f.svg).textContent = b.name;
-    const hit = el('rect', { x: f.x0 + slot * i, y: f.y0, width: slot, height: f.y1 - f.y0, fill: 'transparent' }, f.svg);
-    const tot = b.m + b.f;
-    hit.addEventListener('pointermove', (ev) => showTip(ev, `<b>${b.name} · ${state.hour}시</b>` + tipRow('var(--s1)', '남성', fmt(b.m) + '명') + tipRow('var(--s2)', '여성', fmt(b.f) + '명') + tipRow('', '전체 중 비중', pct((tot / (r.m + r.f)) * 100))));
-    hit.addEventListener('pointerleave', hideTip);
   });
 }
 
+// ---------- 추이 탭 ----------
 function drawDays(ds) {
-  const host = $('dayChart');
-  const peaks = ds.map((d) => day(d)[state.hour] || null);
-  $('dayTitle').textContent = `날짜별 ${state.hour}시 인구`;
+  const host = $('dayChart'), H = state.hour;
+  const pts = ds.map((d) => (day(d)[H] ? val(day(d)[H]) : null));
+  $('dayTitle').innerHTML = `날짜별 ${H}시 ${popLabel()} <span class="pill">${cur().label}</span>`;
   if (ds.length < 2) return (host.innerHTML = `<p class="empty">아직 ${ds.length}일 치만 있습니다. 수집이 쌓이면 날짜별 추이가 표시됩니다.</p>`);
-  const f = frame(host, { H: 220 });
-  const ticks = niceTicks(Math.max(...peaks.map((p) => p?.spop || 0)));
+  const f = frame(host, { H: 240 });
+  const ticks = niceTicks(Math.max(...pts.map((p) => p || 0)));
   const y = yAxis(f, 0, ticks.at(-1), ticks, fmt);
   const x = (i) => f.x0 + (i / (ds.length - 1)) * (f.x1 - f.x0);
   const step = Math.ceil(ds.length / 8);
   ds.forEach((d, i) => { if (i % step === 0) el('text', { x: x(i), y: f.y1 + 18, 'text-anchor': i === 0 ? 'start' : 'middle' }, f.svg).textContent = `${+d.slice(4, 6)}/${+d.slice(6)}`; });
-  path(f, peaks.map((p, i) => (p ? [x(i), y(p.spop)] : null)), 'var(--s1)');
+  path(f, pts.map((p, i) => (p == null ? null : [x(i), y(p)])), 'var(--s1)');
   const si = ds.indexOf(state.date);
-  if (peaks[si]) el('circle', { cx: x(si), cy: y(peaks[si].spop), r: 5, fill: 'var(--s1)', stroke: 'var(--surface)', 'stroke-width': 2 }, f.svg);
+  if (pts[si] != null) el('circle', { cx: x(si), cy: y(pts[si]), r: 5, fill: 'var(--s1)', stroke: 'var(--surface)', 'stroke-width': 2 }, f.svg);
   crosshair(f, ds.map((_, i) => x(i)), (i) => {
-    const p = peaks[i]; if (!p) return null;
-    return { marks: [[y(p.spop), 'var(--s1)']], html: `<b>${dateLabel(ds[i])}</b>` + tipRow('var(--s1)', `${state.hour}시`, fmt(p.spop) + '명') };
+    if (pts[i] == null) return null;
+    return { marks: [[y(pts[i]), 'var(--s1)']], html: `<b>${dateLabel(ds[i])}</b>` + tipRow('var(--s1)', `${H}시 ${targetLabel()}`, fmt(pts[i]) + '명') };
   }, (i) => { state.date = ds[i]; render(); });
+}
+// 요일 × 시간 평균
+function drawDowHeat(ds) {
+  const order = [1, 2, 3, 4, 5, 6, 0];
+  const rows = order.map((w) => {
+    const days = ds.filter((d) => dowOf(d) === w);
+    return { label: `${DOW[w]}요일 (${days.length}일)`, strong: w === dowOf(state.date), n: days.length,
+      cells: Array.from({ length: 24 }, (_, h) => { const v = days.map((d) => day(d)[h]).filter(Boolean).map(val); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; }) };
+  });
+  $('dowTitle').textContent = `요일별 평균 ${popLabel()}`;
+  $('dowDesc').textContent = `보관 중인 ${ds.length}일 치를 요일별로 평균한 값입니다. 괄호 안은 평균에 들어간 날짜 수이고, 날짜가 적은 요일은 참고용입니다.`;
+  heat($('dowHeat'), { rows, rowH: 26, labelW: 96, selCol: state.hour,
+    tipHtml: (i, h, v) => `<b>${DOW[order[i]]}요일 ${h}시 · ${targetLabel()}</b>` + tipRow('', `평균 (${rows[i].n}일)`, fmt(v) + '명'),
+    onClick: (i, h) => { state.hour = h; render(); } });
+}
+// 날짜 × 시간
+function drawCalHeat(ds) {
+  const shown = ds.slice(-42).reverse();
+  $('calTitle').textContent = `날짜별 하루 흐름 (${popLabel()})`;
+  $('calDesc').textContent = `최근 ${shown.length}일을 위에서부터 최신순으로 보여줍니다. 칸을 누르면 그 날짜와 시각으로 이동합니다.`;
+  heat($('calHeat'), { rowH: 14, labelW: 64, selCol: state.hour,
+    rows: shown.map((d) => ({ label: `${+d.slice(4, 6)}/${+d.slice(6)} ${DOW[dowOf(d)]}`, strong: d === state.date, cells: Array.from({ length: 24 }, (_, h) => (day(d)[h] ? val(day(d)[h]) : null)) })),
+    tipHtml: (i, h, v) => `<b>${dateLabel(shown[i])} ${h}시</b>` + tipRow('', targetLabel(), fmt(v) + '명'),
+    onClick: (i, h) => { state.date = shown[i]; state.hour = h; render(); } });
 }
 
 // ---------- 지도 ----------
 let map, layer, info;
 // 배경 지도가 항상 밝은 색이므로 지도 위 색은 화면 테마와 상관없이 밝은 배경 기준으로 고정한다
 const PAL = { ink: '#0b0b0b', ring: '#ffffff' };
-// 여성 비율을 5단계로 끊어 색을 정한다. 연속 그라데이션보다 한눈에 구분된다.
-const SEX_BINS = [
-  { max: 45, color: '#1c5cab', text: '#fff', label: '45% 미만' },
-  { max: 48, color: '#86b6ef', text: '#0b0b0b', label: '45~48%' },
-  { max: 52, color: '#b0afa8', text: '#0b0b0b', label: '48~52%' },
-  { max: 55, color: '#f5b08f', text: '#0b0b0b', label: '52~55%' },
-  { max: Infinity, color: '#d94a12', text: '#fff', label: '55% 이상' },
-];
-const sexBin = (fem) => SEX_BINS.find((b) => fem < b.max);
-const sexColor = (fem) => sexBin(fem).color;
-function summary(id) {
-  const d = store[id]?.[state.date] || [];
-  const r = d[state.hour];
-  if (!r || !(r.m + r.f > 0)) return null;
-  const young = ['20', '25', '30', '35'].reduce((s, k) => s + (r.age['m' + k] || 0) + (r.age['f' + k] || 0), 0);
-  const same = Object.keys(store[id]).filter((x) => x !== state.date && dowOf(x) === dowOf(state.date)).map((x) => store[id][x][r.tt]?.spop).filter((v) => v != null);
-  const avg = same.length ? same.reduce((a, b) => a + b, 0) / same.length : null;
-  return { pop: r.spop, tt: r.tt, fem: (r.f / (r.m + r.f)) * 100, young: (young / (r.m + r.f)) * 100, diff: avg ? (r.spop / avg - 1) * 100 : null, n: same.length };
+const DIV = [['#1c5cab', '#fff'], ['#86b6ef', '#0b0b0b'], ['#b0afa8', '#0b0b0b'], ['#f5b08f', '#0b0b0b'], ['#d94a12', '#fff']];
+const SEQ = [['#cde2fb', '#0b0b0b'], ['#9ec5f4', '#0b0b0b'], ['#5598e7', '#0b0b0b'], ['#256abf', '#fff'], ['#0d366b', '#fff']];
+// 색으로 보여줄 수 있는 값들. cuts가 있으면 고정 구간, 없으면 지금 보이는 지역들의 최소~최대를 5등분한다.
+const COLORS = {
+  fem: { label: () => '여성 비율', get: (m) => m.fem, cuts: [45, 48, 52, 55], pal: DIV, ends: ['남성 많음', '여성 많음'], num: (v) => Math.round(v) + '%' },
+  a20: { label: () => '20대 비중', get: (m) => m.a20, pal: SEQ, num: (v) => Math.round(v) + '%' },
+  a30: { label: () => '30대 비중', get: (m) => m.a30, pal: SEQ, num: (v) => Math.round(v) + '%' },
+  share: { label: () => `${targetLabel()} 비중`, get: (m) => m.share, pal: SEQ, num: (v) => (v < 10 ? v.toFixed(1) : Math.round(v)) + '%' },
+  diff: { label: () => '같은 요일 평균 대비', get: (m) => m.diff, cuts: [-10, -3, 3, 10], pal: DIV, ends: ['평소보다 적음', '많음'], num: (v) => (v >= 0 ? '+' : '−') + Math.abs(Math.round(v)) },
+};
+const colorKey = () => (state.color === 'share' && !hasTarget() ? 'fem' : state.color);
+function colorScale(list) {
+  const c = COLORS[colorKey()], vals = list.map((o) => (o.m ? c.get(o.m) : null)).filter((v) => v != null);
+  let cuts = c.cuts, ends = c.ends;
+  if (!cuts && vals.length) {
+    const lo = Math.min(...vals), hi = Math.max(...vals), st = (hi - lo) / 5 || 1;
+    cuts = [1, 2, 3, 4].map((k) => lo + st * k); ends = [c.num(lo), c.num(hi)];
+  }
+  const bin = (v) => { if (v == null || !cuts) return null; let i = 0; while (i < cuts.length && v >= cuts[i]) i++; return c.pal[i]; };
+  return { c, bin, ends: ends || ['', ''], empty: !vals.length };
 }
-function summaryHtml(x, s) {
+function summaryHtml(x, m) {
   const row = (k, v) => `<div class="r"><span>${k}</span><b>${v}</b></div>`;
-  if (!s) return `<div class="t">${x.label}</div><div>이 날짜의 데이터가 없습니다.</div>`;
-  const compact = `<div class="c">${s.tt}시 ${fmt(s.pop)}명 · 여성 ${pct(s.fem)} · 20·30대 ${pct(s.young)}</div>`;
-  return `<div class="t">${x.label}</div>` + compact + row(`${s.tt}시 인구`, fmt(s.pop) + '명') +
-    row('여성 비율', pct(s.fem)) + row('20·30대 비중', pct(s.young)) +
-    (s.diff != null ? row(`${DOW[dowOf(state.date)]}요일 평균 대비`, (s.diff >= 0 ? '+' : '−') + Math.abs(s.diff).toFixed(1) + '%') : '');
+  if (!m) return `<div class="t">${x.label}</div><div>이 날짜·시각의 데이터가 없습니다.</div>`;
+  const H = state.hour;
+  const compact = `<div class="c">${H}시 ${hasTarget() ? targetLabel() + ' ' : ''}${fmt(m.v)}명 · 여성 ${pct(m.fem)} · ${densFmt(m.dens)}</div>`;
+  return `<div class="t">${x.label}</div>` + compact + row(`${H}시 ${popLabel()}`, fmt(m.v) + '명') +
+    (hasTarget() ? row('전체 중 비중', pct(m.share)) : '') + row('밀도', densFmt(m.dens)) +
+    row('여성 비율', pct(m.fem)) + row('20·30대 비중', pct(m.young)) +
+    (m.diff != null ? row(`${DOW[dowOf(state.date)]}요일 평균 대비`, signed(m.diff)) : '');
 }
 function initMap() {
-  $('scale').innerHTML = SEX_BINS.map((b) => `<i style="background:${b.color}" title="여성 ${b.label}"></i>`).join('');
+  $('color').innerHTML = Object.keys(COLORS).map((k) => `<option value="${k}"></option>`).join('');
   if (!window.L) return ($('map').innerHTML = '<p class="empty">지도를 불러오지 못했습니다. 아래 지역 비교 표를 이용해 주세요.</p>');
   // 커서가 지도 위에 있으면 휠(트랙패드 스크롤)로 바로 확대·축소된다
   map = L.map('map', { scrollWheelZoom: true, zoomSnap: 0.5, wheelPxPerZoomLevel: 90 });
@@ -533,88 +697,112 @@ function initMap() {
 }
 function pick(id) { state.area = id; render(); }
 function drawMap() {
-  const cur = areas.find((x) => x.id === state.area), kind = cur?.kind;
+  const x0 = cur(), kind = x0?.kind;
   $('kPlace').classList.toggle('on', kind === 'place'); $('kDong').classList.toggle('on', kind === 'dong');
+  $('zPop').classList.toggle('on', state.size === 'pop'); $('zDens').classList.toggle('on', state.size === 'dens');
+  $('sizeSeg').hidden = kind !== 'place';
+  for (const o of $('color').options) { o.textContent = COLORS[o.value].label(); o.disabled = o.value === 'share' && !hasTarget(); }
+  $('color').value = colorKey();
+  const list = areas.filter((x) => x.kind === kind).map((x) => ({ x, m: metrics(x) }));
+  const sc = colorScale(list), sizeOf = (m) => (m ? (state.size === 'dens' ? m.dens : m.v) || 0 : 0);
+  $('maplegend').innerHTML = (kind === 'place' ? `<span><i class="dot" style="width:8px;height:8px"></i> <i class="dot" style="width:16px;height:16px"></i> 원 크기 = ${state.size === 'dens' ? '밀도' : popLabel()}</span>` : '') +
+    `<span>색·숫자 = ${sc.c.label()}</span>` +
+    (sc.empty ? '<span>비교할 데이터가 아직 없습니다</span>' : `<span>${sc.ends[0]} <span class="scale">${sc.c.pal.map(([c]) => `<i style="background:${c}"></i>`).join('')}</span> ${sc.ends[1]}</span>`);
   if (!map) return;
   layer.clearLayers();
-  const list = areas.filter((x) => x.kind === kind).map((x) => ({ x, s: summary(x.id) }));
-  const max = Math.max(1, ...list.map((o) => o.s?.pop || 0));
-  info.innerHTML = summaryHtml(cur, summary(cur.id)) + `<div class="d">${dateLabel(state.date)}</div>`;
+  const max = Math.max(1e-9, ...list.map((o) => sizeOf(o.m)));
+  info.innerHTML = summaryHtml(x0, metrics(x0)) + `<div class="d">${dateLabel(state.date)}</div>`;
   // 큰 원이 작은 원을 가리지 않게 큰 것부터 그린다
-  list.sort((a, b) => (b.s?.pop || 0) - (a.s?.pop || 0));
-  for (const { x, s } of list) {
-    const on = x.id === state.area, fill = s ? sexColor(s.fem) : 'transparent';
+  list.sort((a, b) => sizeOf(b.m) - sizeOf(a.m));
+  for (const { x, m } of list) {
+    const on = x.id === state.area, cv = m ? sc.c.get(m) : null, bin = sc.bin(cv), fill = bin ? bin[0] : (m ? '#e1e0d9' : 'transparent');
     let mark;
     if (kind === 'place') {
       if (on) L.polygon(x.boxes, { color: PAL.ink, weight: 1, dashArray: '4 4', fill: false, interactive: false }).addTo(layer);
       const big = $('map').clientWidth < 520 ? 15 : 28;
-      const radius = s ? 7 + big * Math.sqrt(s.pop / max) : 6;
-      mark = L.circleMarker(x.center, { radius, fillColor: fill, fillOpacity: s ? 0.95 : 0,
-        color: on ? PAL.ink : PAL.ring, weight: on ? 3 : 2 });
-      const text = `<b>${x.label}</b>` + (s ? `<span>${fmt(s.pop)}명 · 여성 ${Math.round(s.fem)}%</span>` : '');
-      // 원이 충분히 크면 여성 비율 숫자를 원 안에 적는다
-      if (s && radius >= 12) L.marker(x.center, { interactive: false, zIndexOffset: Math.round(s.pop), icon: L.divIcon({ className: '', iconSize: [0, 0], html: `<div class="pnum" style="color:${sexBin(s.fem).text}">${Math.round(s.fem)}${radius >= 15 ? '%' : ''}</div>` }) }).addTo(layer);
+      const radius = m ? 7 + big * Math.sqrt(sizeOf(m) / max) : 6;
+      mark = L.circleMarker(x.center, { radius, fillColor: fill, fillOpacity: m ? 0.95 : 0, color: on ? PAL.ink : PAL.ring, weight: on ? 3 : 2 });
+      // 원이 충분히 크면 색이 나타내는 값을 원 안에 숫자로 적는다
+      if (bin && radius >= 12) L.marker(x.center, { interactive: false, zIndexOffset: Math.round(sizeOf(m)), icon: L.divIcon({ className: '', iconSize: [0, 0], html: `<div class="pnum" style="color:${bin[1]}">${radius >= 15 ? sc.c.num(cv) : sc.c.num(cv).replace('%', '')}</div>` }) }).addTo(layer);
+      const text = `<b>${x.label}</b>` + (m ? `<span>${fmt(m.v)}명 · ${sc.c.label()} ${cv == null ? '—' : sc.c.num(cv)}</span>` : '');
       L.marker(x.center, { interactive: false, zIndexOffset: 100000, icon: L.divIcon({ className: '', iconSize: [0, 0], html: `<div class="plabel${on ? ' on' : ''}" style="--dx:${Math.round(radius + 6)}px">${text}</div>` }) }).addTo(layer);
     } else {
       if (!dongShapes[x.id]) continue;
-      mark = L.polygon(dongShapes[x.id], { fillColor: fill, fillOpacity: s ? 0.75 : 0, color: on ? PAL.ink : '#52514e', weight: on ? 3 : 1 });
+      mark = L.polygon(dongShapes[x.id], { fillColor: fill, fillOpacity: m ? 0.75 : 0, color: on ? PAL.ink : '#52514e', weight: on ? 3 : 1 });
     }
-    mark.bindTooltip(`<div>${summaryHtml(x, s)}</div>`, { className: 'sumtip', direction: 'top', sticky: kind === 'dong', opacity: 1 });
+    mark.bindTooltip(`<div>${summaryHtml(x, m)}</div>`, { className: 'sumtip', direction: 'top', sticky: kind === 'dong', opacity: 1 });
     mark.on('click', () => pick(x.id));
     mark.addTo(layer);
     if (on) mark.bringToFront();
   }
 }
 function switchKind(kind) {
-  const cur = areas.find((x) => x.id === state.area);
-  if (!cur || cur.kind === kind) return;
-  const next = kind === 'dong' ? areas.find((x) => x.kind === 'dong' && x.id === cur.dong) : areas.find((x) => x.kind === 'place' && x.dong === cur.id);
+  const c = cur();
+  if (!c || c.kind === kind) return;
+  const next = kind === 'dong' ? areas.find((x) => x.kind === 'dong' && x.id === c.dong) : areas.find((x) => x.kind === 'place' && x.dong === c.id);
   pick((next || areas.find((x) => x.kind === kind)).id);
 }
 
+// ---------- 표 ----------
 function drawRank() {
-  const kind = areas.find((x) => x.id === state.area)?.kind, list = areas.filter((x) => x.kind === kind);
+  const kind = cur()?.kind, H = state.hour;
+  const cols = [
+    ['pop', `${H}시 ${popLabel()}(명)`, (o) => o.m.v], ['dens', '밀도(명/ha)', (o) => o.m.dens],
+    ...(hasTarget() ? [['share', `${targetLabel()} 비중`, (o) => o.m.share]] : []),
+    ['fem', '여성 비율', (o) => o.m.fem], ['young', '20·30대 비중', (o) => o.m.young], ['diff', '평소 대비', (o) => o.m.diff],
+  ];
+  const sortCol = cols.find((c) => c[0] === state.sort) || cols[0];
+  const list = areas.filter((x) => x.kind === kind).map((x) => ({ x, m: metrics(x) })).filter((o) => o.m)
+    .sort((a, b) => (sortCol[2](b) ?? -Infinity) - (sortCol[2](a) ?? -Infinity));
   $('rankTitle').textContent = kind === 'place' ? '주요지역 비교' : '행정동 비교';
-  const H = state.hour;
-  $('rankDesc').textContent = `${dateLabel(state.date)} ${H}시 기준, 인구가 많은 순서입니다. 행을 누르면 그 지역으로 바뀝니다.` + (kind === 'place' ? ' 주요지역마다 묶은 격자 수(1~4개)가 달라 인구 크기는 참고용이고, 성비·연령 비중은 그대로 비교할 수 있습니다.' : '');
-  const rowsOf = list.map((x) => {
-    const d = store[x.id]?.[state.date] || [], r = d[H], pk = peakOf(d);
-    if (!r || !(r.m + r.f > 0)) return null;
-    const young = ['20', '25', '30', '35'].reduce((t, k) => t + (r.age['m' + k] || 0) + (r.age['f' + k] || 0), 0);
-    return { x, r, pk, fem: (r.f / (r.m + r.f)) * 100, young: (young / (r.m + r.f)) * 100 };
-  }).filter(Boolean).sort((a, b) => b.r.spop - a.r.spop);
-  if (!rowsOf.length) return ($('rank').innerHTML = '<p class="empty">이 날짜·시각의 데이터가 없습니다.</p>');
-  const max = rowsOf[0].r.spop;
-  $('rank').innerHTML = `<table class="rank"><thead><tr><th>지역</th><th class="barcell">${H}시 인구(명)</th><th>여성 비율</th><th>20·30대 비중</th><th>참고: 하루 최대</th></tr></thead><tbody>` +
-    rowsOf.map((o) => `<tr data-id="${o.x.id}" class="${o.x.id === state.area ? 'on' : ''}"><td>${o.x.label}</td><td class="barcell"><span class="bar" style="width:${Math.max(2, (o.r.spop / max) * 110)}px"></span>${fmt(o.r.spop)}</td><td>${pct(o.fem)}</td><td>${pct(o.young)}</td><td>${o.pk.tt}시 ${fmt(o.pk.spop)}</td></tr>`).join('') +
-    '</tbody></table>';
+  $('rankDesc').textContent = `${dateLabel(state.date)} ${H}시 기준입니다. 열 제목을 누르면 그 값이 큰 순서로 정렬되고, 행을 누르면 그 지역으로 바뀝니다.` + (kind === 'place' ? ' 주요지역마다 묶은 격자 수가 달라 인구는 넓을수록 크게 나오므로, 붐비는 정도는 밀도로 비교하세요.' : '');
+  if (!list.length) return ($('rank').innerHTML = '<p class="empty">이 날짜·시각의 데이터가 없습니다.</p>');
+  const max = Math.max(...list.map((o) => o.m.v), 1e-9);
+  const cell = { pop: (o) => `<td class="barcell"><span class="bar" style="width:${Math.max(2, (o.m.v / max) * 110)}px"></span>${fmt(o.m.v)}</td>`,
+    dens: (o) => `<td>${o.m.dens == null ? '—' : o.m.dens >= 100 ? fmt(o.m.dens) : o.m.dens.toFixed(1)}</td>`, share: (o) => `<td>${pct(o.m.share)}</td>`,
+    fem: (o) => `<td>${pct(o.m.fem)}</td>`, young: (o) => `<td>${pct(o.m.young)}</td>`, diff: (o) => `<td>${o.m.diff == null ? '—' : signed(o.m.diff)}</td>` };
+  $('rank').innerHTML = '<table class="rank"><thead><tr><th>지역</th>' +
+    cols.map(([k, name]) => `<th data-k="${k}" class="${k === 'pop' ? 'barcell ' : ''}${k === sortCol[0] ? 'sorted' : ''}">${name}${k === sortCol[0] ? ' ▼' : ''}</th>`).join('') + '</tr></thead><tbody>' +
+    list.map((o) => `<tr data-id="${o.x.id}" class="${o.x.id === state.area ? 'on' : ''}"><td>${o.x.label}</td>${cols.map(([k]) => cell[k](o)).join('')}</tr>`).join('') + '</tbody></table>';
 }
-
-function drawTable(rows, base) {
-  let h = '<table><thead><tr><th>시</th><th>인구(명)</th>' + (base ? '<th>요일 평균(명)</th><th>차이</th>' : '') + '<th>남성</th><th>여성</th></tr></thead><tbody>';
-  for (let t = 0; t < 24; t++) {
-    const r = rows[t]; if (!r) continue;
-    const b = base?.avg[t], d = b ? (r.spop / b - 1) * 100 : null;
-    h += `<tr><td>${t}</td><td>${fmt(r.spop)}</td>` + (base ? `<td>${b ? fmt(b) : '—'}</td><td>${d == null ? '—' : (d >= 0 ? '+' : '−') + Math.abs(d).toFixed(1) + '%'}</td>` : '') + `<td>${pct((r.m / (r.m + r.f)) * 100)}</td><td>${pct((r.f / (r.m + r.f)) * 100)}</td></tr>`;
+function drawTable(rows) {
+  const t = hasTarget();
+  let h = `<table><thead><tr><th>시</th><th>${t ? targetLabel() + ' ' : ''}인구(명)</th>` + (t ? '<th>전체(명)</th>' : '') + '<th>요일 평균(명)</th><th>차이</th><th>남성</th><th>여성</th></tr></thead><tbody>';
+  for (let i = 0; i < 24; i++) {
+    const r = rows[i]; if (!r) continue;
+    const b = weekdayAvg(state.area, state.date, i)?.avg, v = val(r);
+    h += `<tr><td>${i}</td><td>${fmt(v)}</td>` + (t ? `<td>${fmt(r.spop)}</td>` : '') + `<td>${b ? fmt(b) : '—'}</td><td>${b ? signed((v / b - 1) * 100) : '—'}</td><td>${pct((r.m / (r.m + r.f)) * 100)}</td><td>${pct((r.f / (r.m + r.f)) * 100)}</td></tr>`;
   }
   $('table').innerHTML = h + '</tbody></table>';
 }
 
-$('rank').addEventListener('click', (e) => { const tr = e.target.closest('tr[data-id]'); if (!tr) return; state.area = tr.dataset.id; render(); scrollTo({ top: 0, behavior: 'smooth' }); });
+// ---------- 조작 ----------
+const set = (patch) => { Object.assign(state, patch); render(); };
+$('rank').addEventListener('click', (e) => {
+  const th = e.target.closest('th[data-k]'); if (th) return set({ sort: th.dataset.k });
+  const tr = e.target.closest('tr[data-id]'); if (!tr) return;
+  set({ area: tr.dataset.id }); scrollTo({ top: 0, behavior: 'smooth' });
+});
 $('kPlace').addEventListener('click', () => switchKind('place'));
 $('kDong').addEventListener('click', () => switchKind('dong'));
-$('mapHour').addEventListener('change', (e) => { state.hour = +e.target.value; render(); });
-$('area').addEventListener('change', (e) => { state.area = e.target.value; render(); });
+$('zPop').addEventListener('click', () => set({ size: 'pop' }));
+$('zDens').addEventListener('click', () => set({ size: 'dens' }));
+$('color').addEventListener('change', (e) => set({ color: e.target.value }));
+$('sex').addEventListener('change', (e) => set({ sex: e.target.value }));
+$('age').addEventListener('change', (e) => set({ age: e.target.value }));
+$('tabNowBtn').addEventListener('click', () => { set({ tab: 'now' }); map?.invalidateSize(); });
+$('tabTrendBtn').addEventListener('click', () => set({ tab: 'trend' }));
+$('mapHour').addEventListener('change', (e) => set({ hour: +e.target.value }));
+$('area').addEventListener('change', (e) => set({ area: e.target.value }));
 $('date').addEventListener('change', (e) => {
   const want = e.target.value.replaceAll('-', ''), ds = dates();
   if (!want) return render();
-  state.date = ds.includes(want) ? want : ds.reduce((a, b) => (Math.abs(+b - +want) < Math.abs(+a - +want) ? b : a));
-  render();
+  set({ date: ds.includes(want) ? want : ds.reduce((a, b) => (Math.abs(+b - +want) < Math.abs(+a - +want) ? b : a)) });
 });
-$('prev').addEventListener('click', () => { const ds = dates(); state.date = ds[ds.indexOf(state.date) - 1]; render(); });
-$('next').addEventListener('click', () => { const ds = dates(); state.date = ds[ds.indexOf(state.date) + 1]; render(); });
-$('hPrev').addEventListener('click', () => { state.hour = Math.max(0, state.hour - 1); render(); });
-$('hNext').addEventListener('click', () => { state.hour = Math.min(23, state.hour + 1); render(); });
+$('prev').addEventListener('click', () => { const ds = dates(); set({ date: ds[ds.indexOf(state.date) - 1] }); });
+$('next').addEventListener('click', () => { const ds = dates(); set({ date: ds[ds.indexOf(state.date) + 1] }); });
+$('hPrev').addEventListener('click', () => set({ hour: Math.max(0, state.hour - 1) }));
+$('hNext').addEventListener('click', () => set({ hour: Math.min(23, state.hour + 1) }));
 // 입력 칸 밖에서는 방향키로도 넘긴다: ←→ 날짜, ↑↓ 기준 시각
 addEventListener('keydown', (e) => {
   if (e.altKey || e.ctrlKey || e.metaKey || /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName || '')) return;
@@ -622,7 +810,7 @@ addEventListener('keydown', (e) => {
   if (!btn || $(btn).disabled) return;
   e.preventDefault(); $(btn).click();
 });
-$('hour').addEventListener('input', (e) => { state.hour = +e.target.value; render(); });
+$('hour').addEventListener('input', (e) => set({ hour: +e.target.value }));
 
 let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => state.area && render(), 150); });
 
