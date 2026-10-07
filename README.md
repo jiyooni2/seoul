@@ -2,7 +2,7 @@
 
 서울 열린데이터광장의 「서울 생활인구(250m)」 데이터를 매일 받아 쌓고, 시간대별 인구·성비·연령 분포를 보여주는 사이트입니다.
 
-- 수집: GitHub Actions가 하루 두 번(한국 시간 06:17, 18:17) `scripts/collect.mjs`를 실행합니다.
+- 수집: GitHub Actions가 2시간마다 `scripts/collect.mjs`를 실행합니다. 이미 받은 날짜는 건너뛰고, 실패하면 다음 실행이 다시 시도합니다.
 - 저장: `docs/data/place/`(주요지역), `docs/data/dong/`(행정동)에 월별 CSV로 누적됩니다.
 - 사이트: `docs/` 폴더를 GitHub Pages로 배포합니다.
 

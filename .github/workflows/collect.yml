@@ -2,9 +2,9 @@ name: 생활인구 수집
 
 on:
   schedule:
-    # GitHub Actions의 cron은 UTC 기준입니다. 하루 두 번 돌려 하루치를 놓치지 않게 합니다.
-    - cron: '17 9 * * *'   # 한국 시간 18:17
-    - cron: '17 21 * * *'  # 한국 시간 06:17
+    # GitHub Actions의 cron은 UTC 기준입니다. 2시간마다 돌려서 한 번 실패해도 다음 실행이 자동으로 메웁니다.
+    # 이미 받은 날짜는 건너뛰므로 대부분의 실행은 API를 몇 번만 호출하고 끝납니다.
+    - cron: '17 */2 * * *'  # 한국 시간 홀수 시 17분 (01:17, 03:17, ... 23:17)
   workflow_dispatch:        # Actions 탭에서 수동 실행 버튼
 
 permissions:
