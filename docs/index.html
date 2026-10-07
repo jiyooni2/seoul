@@ -10,14 +10,14 @@
   color-scheme: light;
   --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
   --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,.10);
-  --s1: #2a78d6; --s2: #eb6834; --ref: #898781;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --ref: #898781;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
     --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink2: #c3c2b7; --muted: #898781;
     --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,.10);
-    --s1: #3987e5; --s2: #d95926; --ref: #898781;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --ref: #898781;
   }
 }
 * { box-sizing: border-box; }
@@ -131,9 +131,6 @@ footer p { margin: 4px 0; }
 .maphead select { padding: 5px 8px; font-size: 13px; }
 .who select { padding: 7px 6px; border: 0; border-radius: 0; background: transparent; font-size: 15px; }
 .who select + select { border-left: 1px solid var(--border); }
-.heatlegend { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink2); margin-top: 6px; }
-.heatlegend i { display: inline-block; width: 110px; height: 8px; border-radius: 4px; }
-svg .hl { fill: var(--ink); font-weight: 650; }
 .rank th[data-k] { cursor: pointer; user-select: none; }
 .rank th.sorted { color: var(--ink); }
 .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; background: color-mix(in srgb, var(--s1) 14%, transparent); color: var(--ink); font-weight: 600; }
@@ -197,11 +194,6 @@ svg .hl { fill: var(--ink); font-weight: 650; }
         <div class="legend" id="hourLegend"></div>
         <div id="hourChart"></div>
       </section>
-      <section class="card wide">
-        <h2>누가 언제 많은가</h2>
-        <p class="desc">가로는 시간, 세로는 성·연령대입니다. 색이 진할수록 사람이 많습니다. 칸을 누르면 그 시각과 대상으로 바뀝니다.</p>
-        <div id="groupHeat"></div>
-      </section>
       <section class="card">
         <h2>시간대별 여성 비율</h2>
         <p class="desc">50% 선보다 위면 여성이, 아래면 남성이 더 많습니다.</p>
@@ -235,14 +227,10 @@ svg .hl { fill: var(--ink); font-weight: 650; }
         <div id="dayChart"></div>
       </section>
       <section class="card wide">
-        <h2 id="dowTitle">요일별 평균 흐름</h2>
+        <h2 id="dowTitle">평일·토요일·일요일 평균 흐름</h2>
         <p class="desc" id="dowDesc"></p>
-        <div id="dowHeat"></div>
-      </section>
-      <section class="card wide">
-        <h2 id="calTitle">날짜 × 시간</h2>
-        <p class="desc" id="calDesc"></p>
-        <div id="calHeat"></div>
+        <div class="legend" id="dowLegend"></div>
+        <div id="dowChart"></div>
       </section>
     </div>
   </div>
@@ -443,36 +431,6 @@ function crosshair(f, xs, onMove, onClick) {
   if (onClick) { hit.style.cursor = 'pointer'; hit.addEventListener('click', (ev) => onClick(nearest(ev))); }
 }
 
-// 히트맵: 한 가지 색의 밝기로 크기를 나타낸다. rows = [{ label, cells: [값|null × 24], strong }]
-const HEAT = DARK ? { lo: [31, 42, 56], hi: [134, 182, 239] } : { lo: [230, 240, 253], hi: [16, 66, 129] };
-const heatColor = (t) => `rgb(${HEAT.lo.map((v, i) => Math.round(v + (HEAT.hi[i] - v) * t)).join(',')})`;
-function heat(host, { rows, rowH = 20, labelW = 84, gaps = [], selCol = null, unit = '명', tipHtml, onClick }) {
-  const max = Math.max(0, ...rows.flatMap((r) => r.cells.map((v) => v || 0)));
-  if (!rows.length || !(max > 0)) return (host.innerHTML = '<p class="empty">표시할 데이터가 없습니다.</p>');
-  const gapH = 8, H = rows.length * rowH + gaps.length * gapH + 4 + 24;
-  const f = frame(host, { H, ml: labelW, mr: 6, mt: 4, mb: 24 });
-  const cw = (f.x1 - f.x0) / 24, pad = rowH >= 16 ? 1 : 0.5;
-  let y = f.y0;
-  const tops = rows.map((r, i) => { if (gaps.includes(i)) y += gapH; const t = y; y += rowH; return t; });
-  rows.forEach((r, i) => {
-    el('text', { x: f.x0 - 8, y: tops[i] + rowH / 2 + 4, 'text-anchor': 'end', ...(r.strong ? { class: 'hl' } : {}) }, f.svg).textContent = r.label;
-    r.cells.forEach((v, h) => {
-      const rect = el('rect', { x: f.x0 + h * cw + pad, y: tops[i] + pad, width: Math.max(1, cw - 2 * pad), height: rowH - 2 * pad, rx: Math.min(3, rowH / 5),
-        fill: v == null ? 'var(--grid)' : heatColor(v / max), 'data-i': i, 'data-h': h }, f.svg);
-      if (v == null) rect.setAttribute('opacity', 0.35);
-    });
-  });
-  for (let h = 0; h < 24; h += 3) el('text', { x: f.x0 + (h + 0.5) * cw, y: y + 16, 'text-anchor': 'middle' }, f.svg).textContent = h + '시';
-  if (selCol != null) el('rect', { x: f.x0 + selCol * cw, y: f.y0 - 1, width: cw, height: y - f.y0 + 2, fill: 'none', stroke: 'var(--ink)', 'stroke-width': 1.5, rx: 3, 'pointer-events': 'none' }, f.svg);
-  const at = (ev) => { const t = ev.target; return t.dataset?.i != null ? [+t.dataset.i, +t.dataset.h] : null; };
-  f.svg.addEventListener('pointermove', (ev) => { const c = at(ev); if (!c || rows[c[0]].cells[c[1]] == null) return hideTip(); showTip(ev, tipHtml(c[0], c[1], rows[c[0]].cells[c[1]])); });
-  f.svg.addEventListener('pointerleave', hideTip);
-  if (onClick) { f.svg.style.cursor = 'pointer'; f.svg.addEventListener('click', (ev) => { const c = at(ev); if (c) onClick(c[0], c[1]); }); }
-  const lg = document.createElement('div'); lg.className = 'heatlegend';
-  lg.innerHTML = `<span>적음</span><i style="background:linear-gradient(90deg, ${heatColor(0)}, ${heatColor(1)})"></i><span>많음 (가장 진한 칸 ${fmt(max)}${unit})</span>`;
-  host.appendChild(lg);
-}
-
 // ---------- 화면 ----------
 function render() {
   const ds = dates();
@@ -489,7 +447,7 @@ function render() {
   $('tabNowBtn').classList.toggle('on', state.tab === 'now'); $('tabTrendBtn').classList.toggle('on', state.tab === 'trend');
   $('tabNow').hidden = state.tab !== 'now'; $('tabTrend').hidden = state.tab !== 'trend';
 
-  if (state.tab === 'trend') { drawDays(ds); drawDowHeat(ds); drawCalHeat(ds); return; }
+  if (state.tab === 'trend') { drawDays(ds); drawDowLines(ds); return; }
 
   // 요약 타일
   const m = metrics(x), tiles = [];
@@ -504,7 +462,6 @@ function render() {
   $('tiles').innerHTML = tiles.map(([k, v, n]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="n">${n}</div></div>`).join('');
 
   drawHour(rows);
-  drawGroupHeat(rows);
   drawSex(rows);
   drawAge(rows);
   drawTable(rows);
@@ -536,18 +493,6 @@ function drawHour(rows) {
     return { marks: [[y(vals[h]), 'var(--s1)'], ...(b != null ? [[y(b), 'var(--ref)']] : [])],
       html: `<b>${h}시 · ${targetLabel()}</b>` + tipRow('var(--s1)', dateLabel(state.date), fmt(vals[h]) + '명') + (b ? tipRow('var(--ref)', '요일 평균', fmt(b) + '명') + tipRow('', '차이', signed((vals[h] / b - 1) * 100)) : '') };
   }, (h) => { state.hour = h; render(); });
-}
-
-// 시간 × 성·연령 히트맵
-function drawGroupHeat(rows) {
-  const groups = ['m', 'f'].flatMap((s) => BANDS.map((b, i) => ({ s, i, label: `${SEXES[s]} ${b[0]}` })));
-  const picked = (g) => hasTarget() && (state.sex === 'all' || state.sex === g.s) && (state.age === 'all' || +state.age === g.i);
-  heat($('groupHeat'), {
-    rows: groups.map((g) => ({ label: g.label, strong: picked(g), cells: Array.from({ length: 24 }, (_, h) => (rows[h] ? groupVal(rows[h], g.s, g.i) : null)) })),
-    gaps: [BANDS.length], labelW: 96, selCol: state.hour,
-    tipHtml: (i, h, v) => `<b>${groups[i].label} · ${h}시</b>` + tipRow('', '인구', fmt(v) + '명') + tipRow('', '그 시각 전체 중', pct((v / (rows[h].m + rows[h].f)) * 100)),
-    onClick: (i, h) => { state.hour = h; state.sex = groups[i].s; state.age = String(groups[i].i); render(); },
-  });
 }
 
 function drawSex(rows) {
@@ -613,29 +558,28 @@ function drawDays(ds) {
     return { marks: [[y(pts[i]), 'var(--s1)']], html: `<b>${dateLabel(ds[i])}</b>` + tipRow('var(--s1)', `${H}시 ${targetLabel()}`, fmt(pts[i]) + '명') };
   }, (i) => { state.date = ds[i]; render(); });
 }
-// 요일 × 시간 평균
-function drawDowHeat(ds) {
-  const order = [1, 2, 3, 4, 5, 6, 0];
-  const rows = order.map((w) => {
-    const days = ds.filter((d) => dowOf(d) === w);
-    return { label: `${DOW[w]}요일 (${days.length}일)`, strong: w === dowOf(state.date), n: days.length,
-      cells: Array.from({ length: 24 }, (_, h) => { const v = days.map((d) => day(d)[h]).filter(Boolean).map(val); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; }) };
-  });
-  $('dowTitle').textContent = `요일별 평균 ${popLabel()}`;
-  $('dowDesc').textContent = `보관 중인 ${ds.length}일 치를 요일별로 평균한 값입니다. 괄호 안은 평균에 들어간 날짜 수이고, 날짜가 적은 요일은 참고용입니다.`;
-  heat($('dowHeat'), { rows, rowH: 26, labelW: 96, selCol: state.hour,
-    tipHtml: (i, h, v) => `<b>${DOW[order[i]]}요일 ${h}시 · ${targetLabel()}</b>` + tipRow('', `평균 (${rows[i].n}일)`, fmt(v) + '명'),
-    onClick: (i, h) => { state.hour = h; render(); } });
-}
-// 날짜 × 시간
-function drawCalHeat(ds) {
-  const shown = ds.slice(-42).reverse();
-  $('calTitle').textContent = `날짜별 하루 흐름 (${popLabel()})`;
-  $('calDesc').textContent = `최근 ${shown.length}일을 위에서부터 최신순으로 보여줍니다. 칸을 누르면 그 날짜와 시각으로 이동합니다.`;
-  heat($('calHeat'), { rowH: 14, labelW: 64, selCol: state.hour,
-    rows: shown.map((d) => ({ label: `${+d.slice(4, 6)}/${+d.slice(6)} ${DOW[dowOf(d)]}`, strong: d === state.date, cells: Array.from({ length: 24 }, (_, h) => (day(d)[h] ? val(day(d)[h]) : null)) })),
-    tipHtml: (i, h, v) => `<b>${dateLabel(shown[i])} ${h}시</b>` + tipRow('', targetLabel(), fmt(v) + '명'),
-    onClick: (i, h) => { state.date = shown[i]; state.hour = h; render(); } });
+// 평일·토요일·일요일의 시간대별 평균
+function drawDowLines(ds) {
+  const host = $('dowChart');
+  const groups = [['평일', 'var(--s1)', (w) => w >= 1 && w <= 5], ['토요일', 'var(--s2)', (w) => w === 6], ['일요일', 'var(--s3)', (w) => w === 0]].map(([name, color, test]) => {
+    const days = ds.filter((d) => test(dowOf(d)));
+    return { name, color, n: days.length, on: test(dowOf(state.date)),
+      avg: Array.from({ length: 24 }, (_, h) => { const v = days.map((d) => day(d)[h]).filter(Boolean).map(val); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; }) };
+  }).filter((g) => g.n);
+  $('dowTitle').innerHTML = `평일·토요일·일요일 평균 ${popLabel()} <span class="pill">${cur().label}</span>`;
+  $('dowDesc').textContent = `보관 중인 ${ds.length}일 치를 평균한 하루 흐름입니다. 날짜 수가 적은 선은 참고용입니다.`;
+  $('dowLegend').innerHTML = groups.map((g) => `<span><i style="border-color:${g.color}"></i>${g.name} (${g.n}일)</span>`).join('');
+  if (ds.length < 2) return (host.innerHTML = `<p class="empty">아직 ${ds.length}일 치만 있습니다. 수집이 쌓이면 평균 흐름이 표시됩니다.</p>`);
+  const f = frame(host);
+  const ticks = niceTicks(Math.max(...groups.flatMap((g) => g.avg.map((v) => v || 0))));
+  const y = yAxis(f, 0, ticks.at(-1), ticks, fmt), x = hourAxis(f);
+  el('line', { x1: x(state.hour), x2: x(state.hour), y1: f.y0, y2: f.y1, stroke: 'var(--axis)', 'stroke-width': 1, 'stroke-dasharray': '3 3' }, f.svg);
+  for (const g of groups) path(f, g.avg.map((v, h) => (v == null ? null : [x(h), y(v)])), g.color);
+  crosshair(f, Array.from({ length: 24 }, (_, h) => x(h)), (h) => {
+    const live = groups.filter((g) => g.avg[h] != null);
+    if (!live.length) return null;
+    return { marks: live.map((g) => [y(g.avg[h]), g.color]), html: `<b>${h}시 · ${targetLabel()}</b>` + live.map((g) => tipRow(g.color, g.name, fmt(g.avg[h]) + '명')).join('') };
+  }, (h) => set({ hour: h }));
 }
 
 // ---------- 지도 ----------
