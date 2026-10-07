@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>종로3가 생활인구 기록</title>
+<title>서울 핫플 생활인구 기록</title>
 <style>
 :root {
   color-scheme: light;
@@ -67,6 +67,12 @@ summary { cursor: pointer; font-size: 13px; color: var(--ink2); }
 table { border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; width: 100%; }
 th, td { padding: 5px 10px; text-align: right; border-bottom: 1px solid var(--grid); white-space: nowrap; }
 th { color: var(--ink2); font-weight: 600; }
+.rank td:first-child, .rank th:first-child { text-align: left; }
+.rank tbody tr { cursor: pointer; }
+.rank tbody tr:hover td { background: color-mix(in srgb, var(--ink) 4%, transparent); }
+.rank tr.on td { background: color-mix(in srgb, var(--s1) 12%, transparent); font-weight: 600; }
+.rank .bar { display: inline-block; height: 8px; border-radius: 0 4px 4px 0; background: var(--s1); vertical-align: middle; margin-right: 8px; }
+.rank .barcell { text-align: left; min-width: 180px; }
 .empty { color: var(--muted); font-size: 13px; padding: 24px 0; text-align: center; }
 footer { margin-top: 24px; font-size: 12px; color: var(--muted); }
 footer p { margin: 4px 0; }
@@ -74,7 +80,7 @@ footer p { margin: 4px 0; }
 </head>
 <body>
 <main>
-  <h1>종로3가 생활인구 기록</h1>
+  <h1>서울 핫플 생활인구 기록</h1>
   <p class="sub" id="status">데이터를 불러오는 중입니다.</p>
 
   <div class="filters">
@@ -113,14 +119,20 @@ footer p { margin: 4px 0; }
     </section>
   </div>
 
+  <section class="card" style="margin-top:12px">
+    <h2 id="rankTitle">지역 비교</h2>
+    <p class="desc" id="rankDesc"></p>
+    <div class="tablewrap" id="rank"></div>
+  </section>
+
   <details>
-    <summary>표로 보기</summary>
+    <summary>선택한 지역의 시간대별 표</summary>
     <div class="tablewrap" id="table"></div>
   </details>
 
   <footer>
     <p>출처: 서울 열린데이터광장(서울특별시), 서울 생활인구(250m) 내국인. 공공누리 제1유형.</p>
-    <p>내국인만 집계된 추계 인구이며 약 4일 늦게 공개됩니다. 격자는 250m × 250m 단위라 특정 거리만의 수치는 아닙니다.</p>
+    <p>내국인만 집계된 추계 인구이며 약 4일 늦게 공개됩니다. 핫플 수치는 중심점 주변 250m 격자 1~4개를 합친 값이라 특정 거리만의 수치는 아닙니다.</p>
   </footer>
 </main>
 <div id="tip" role="status"></div>
@@ -153,33 +165,20 @@ function parseCsv(text) {
   });
 }
 function put(id, row) { ((store[id] ??= {})[row.ymd] ??= [])[row.tt] = row; }
-function addRows(a, b) {
-  const o = { ymd: a.ymd, tt: a.tt, spop: a.spop + b.spop, m: a.m + b.m, f: a.f + b.f, age: {} };
-  for (const k in a.age) o.age[k] = a.age[k] + (b.age[k] || 0);
-  return o;
-}
-
 async function load() {
   const get = (f) => fetch('data/' + f, { cache: 'no-cache' }).then((r) => (r.ok ? r.text() : ''));
-  const [cfg, dong, cell, meta] = await Promise.all([get('areas.json'), get('dong.csv'), get('cell.csv'), get('meta.json')]);
-  const a = JSON.parse(cfg);
-  if (dong) parseCsv(dong).forEach((r) => put(r.id, r));
-  if (cell) parseCsv(cell).forEach((r) => put(r.id, r));
-  for (const g of a.groups || []) {
-    const parts = g.cells.map((c) => store[c] || {});
-    for (const ymd of Object.keys(parts[0])) {
-      if (!parts.every((p) => p[ymd])) continue;
-      for (let h = 0; h < 24; h++) {
-        const rows = parts.map((p) => p[ymd][h]);
-        if (rows.every(Boolean)) put(g.id, { ...rows.reduce(addRows), ymd, tt: h });
-      }
-    }
-  }
-  areas = [...(a.groups || []), ...a.cells, ...a.dongs].filter((x) => store[x.id]);
-  $('area').innerHTML = areas.map((x) => `<option value="${x.id}">${x.label}</option>`).join('');
-  const m = meta ? JSON.parse(meta) : null;
-  $('status').textContent = m
-    ? `마지막 수집 ${new Date(m.updatedAt).toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'short' })} · 행정동 ${m.dong?.days ?? 0}일 치, 격자 ${m.cell?.days ?? 0}일 치 보관 중`
+  const [cfg, idxText] = await Promise.all([get('areas.json'), get('index.json')]);
+  const a = JSON.parse(cfg), idx = idxText ? JSON.parse(idxText) : {};
+  // 종류별로 최근 3개월 파일만 읽는다 (같은 요일 평균을 내기에 충분한 기간)
+  const files = ['place', 'dong'].flatMap((k) => (idx[k]?.months || []).slice(-3).map((m) => `${k}/${m}.csv`));
+  (await Promise.all(files.map(get))).forEach((t) => t && parseCsv(t).forEach((r) => put(r.id, r)));
+  const places = a.places.filter((x) => store[x.id]).map((x) => ({ ...x, kind: 'place' }));
+  const dongs = a.dongs.filter((x) => store[x.id]).map((x) => ({ ...x, kind: 'dong', label: `${x.label} (${x.near.join(', ')})` }));
+  areas = [...places, ...dongs];
+  const opts = (list) => list.map((x) => `<option value="${x.id}">${x.label}</option>`).join('');
+  $('area').innerHTML = `<optgroup label="핫플 중심 (250m 격자 묶음)">${opts(places)}</optgroup><optgroup label="핫플이 속한 행정동 전체">${opts(dongs)}</optgroup>`;
+  $('status').textContent = idx.updatedAt
+    ? `마지막 수집 ${new Date(idx.updatedAt).toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'short' })} · 핫플 ${idx.place?.days ?? 0}일 치, 행정동 ${idx.dong?.days ?? 0}일 치 보관 중`
     : '';
   state.area = areas[0]?.id;
   state.date = dates().at(-1);
@@ -310,6 +309,7 @@ function render() {
   drawAge(rows);
   drawDays(ds);
   drawTable(rows, base);
+  drawRank();
 }
 
 function drawHour(rows, base, peak) {
@@ -393,6 +393,23 @@ function drawDays(ds) {
   }, (i) => { state.date = ds[i]; state.hour = null; render(); });
 }
 
+function drawRank() {
+  const kind = areas.find((x) => x.id === state.area)?.kind, list = areas.filter((x) => x.kind === kind);
+  $('rankTitle').textContent = kind === 'place' ? '핫플 비교' : '행정동 비교';
+  $('rankDesc').textContent = `${dateLabel(state.date)} 기준, 정점 인구가 많은 순서입니다. 행을 누르면 그 지역으로 바뀝니다.` + (kind === 'place' ? ' 핫플마다 묶은 격자 수(1~4개)가 달라 인구 크기는 참고용이고, 시각·성비·연령 비중은 그대로 비교할 수 있습니다.' : '');
+  const rowsOf = list.map((x) => {
+    const d = store[x.id]?.[state.date] || [], p = peakOf(d);
+    if (!p) return null;
+    const young = ['20', '25', '30', '35'].reduce((s, k) => s + (p.age['m' + k] || 0) + (p.age['f' + k] || 0), 0);
+    return { x, p, night: d[21], fem: (p.f / (p.m + p.f)) * 100, young: (young / (p.m + p.f)) * 100 };
+  }).filter(Boolean).sort((a, b) => b.p.spop - a.p.spop);
+  if (!rowsOf.length) return ($('rank').innerHTML = '<p class="empty">이 날짜의 데이터가 없습니다.</p>');
+  const max = rowsOf[0].p.spop;
+  $('rank').innerHTML = '<table class="rank"><thead><tr><th>지역</th><th class="barcell">정점 인구(명)</th><th>정점 시각</th><th>21시 인구(명)</th><th>여성 비율</th><th>20·30대 비중</th></tr></thead><tbody>' +
+    rowsOf.map((r) => `<tr data-id="${r.x.id}" class="${r.x.id === state.area ? 'on' : ''}"><td>${r.x.label}</td><td class="barcell"><span class="bar" style="width:${Math.max(2, (r.p.spop / max) * 110)}px"></span>${fmt(r.p.spop)}</td><td>${r.p.tt}시</td><td>${r.night ? fmt(r.night.spop) : '—'}</td><td>${pct(r.fem)}</td><td>${pct(r.young)}</td></tr>`).join('') +
+    '</tbody></table>';
+}
+
 function drawTable(rows, base) {
   let h = '<table><thead><tr><th>시</th><th>인구(명)</th>' + (base ? '<th>요일 평균(명)</th><th>차이</th>' : '') + '<th>남성</th><th>여성</th></tr></thead><tbody>';
   for (let t = 0; t < 24; t++) {
@@ -403,6 +420,7 @@ function drawTable(rows, base) {
   $('table').innerHTML = h + '</tbody></table>';
 }
 
+$('rank').addEventListener('click', (e) => { const tr = e.target.closest('tr[data-id]'); if (!tr) return; state.area = tr.dataset.id; state.hour = null; render(); scrollTo({ top: 0, behavior: 'smooth' }); });
 $('area').addEventListener('change', (e) => { state.area = e.target.value; state.hour = null; render(); });
 $('date').addEventListener('change', (e) => {
   const want = e.target.value.replaceAll('-', ''), ds = dates();

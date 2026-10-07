@@ -1,8 +1,10 @@
 // 서울 생활인구(250m) 수집기
-// - 행정동별: 최근 LOOKBACK_DAYS일 중 비어 있는 날짜를 시간대별로 조회
-// - 격자별: API가 제공하는 하루치(약 4일 전)를 전부 넘겨 받아 관심 격자만 보관
+// - 행정동: 최근 LOOKBACK_DAYS일 중 비어 있는 날짜를 시간대별로 조회
+// - 핫플: 격자 API가 제공하는 하루치(약 4일 전)를 전부 넘겨 받아, 핫플별 격자 묶음의 합만 보관
+// 수집 대상은 docs/data/areas.json 에서 정한다.
 // 실행: SEOUL_API_KEY=... node scripts/collect.mjs
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, readdir, mkdir } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -76,23 +78,39 @@ async function pool(items, worker) {
 }
 
 const clean = (v) => (v == null || v === '*' ? '' : String(v).trim());
-const toRecord = (row, id) => [clean(row.YMD), clean(row.TT).padStart(2, '0'), id, ...NUM_COLS.map((c) => clean(row[c]))];
+// 파일 크기를 줄이려고 행정동 값은 정수로 반올림해 저장한다 (가려진 값 *은 빈칸)
+const toRecord = (row, id) => [clean(row.YMD), clean(row.TT).padStart(2, '0'), id, ...NUM_COLS.map((c) => (clean(row[c]) === '' ? '' : String(Math.round(Number(row[c])))))];
 
-async function loadCsv(file) {
+// 데이터는 종류별 폴더에 월 단위 파일(YYYY-MM.csv)로 나눠 쌓는다.
+async function loadDir(kind) {
+  const dir = path.join(DATA, kind);
   const map = new Map();
-  if (!existsSync(file)) return map;
-  const lines = (await readFile(file, 'utf8')).split('\n').slice(1);
-  for (const line of lines) {
-    if (!line) continue;
-    const f = line.split(',');
-    map.set(f.slice(0, 3).join('|'), f);
+  if (!existsSync(dir)) return map;
+  for (const name of (await readdir(dir)).filter((n) => /^\d{4}-\d{2}\.csv$/.test(n))) {
+    for (const line of (await readFile(path.join(dir, name), 'utf8')).split('\n').slice(1)) {
+      if (!line) continue;
+      const f = line.split(',');
+      map.set(f.slice(0, 3).join('|'), f);
+    }
   }
   return map;
 }
 
-async function saveCsv(file, map) {
-  const rows = [...map.values()].sort((a, b) => (a[0] + a[1] + a[2] < b[0] + b[1] + b[2] ? -1 : 1));
-  await writeFile(file, [HEADER.join(','), ...rows.map((r) => r.join(','))].join('\n') + '\n');
+async function saveDir(kind, map) {
+  const dir = path.join(DATA, kind);
+  await mkdir(dir, { recursive: true });
+  const byMonth = new Map();
+  for (const f of map.values()) {
+    const m = f[0].slice(0, 4) + '-' + f[0].slice(4, 6);
+    if (!byMonth.has(m)) byMonth.set(m, []);
+    byMonth.get(m).push(f);
+  }
+  for (const [m, rows] of byMonth) {
+    rows.sort((x, y) => (x[0] + x[1] + x[2] < y[0] + y[1] + y[2] ? -1 : 1));
+    await writeFile(path.join(dir, m + '.csv'), [HEADER.join(','), ...rows.map((r) => r.join(','))].join('\n') + '\n');
+  }
+  const dates = [...new Set([...map.values()].map((f) => f[0]))].sort();
+  return { months: [...byMonth.keys()].sort(), first: dates[0] || null, last: dates.at(-1) || null, days: dates.length };
 }
 
 // 한국 시간 기준 n일 전 날짜(YYYYMMDD)
@@ -109,11 +127,9 @@ function datesWith(map, ids) {
 }
 
 async function collectDong(dongIds) {
-  const file = path.join(DATA, 'dong.csv');
-  const map = await loadCsv(file);
+  const map = await loadDir('dong');
   const done = datesWith(map, dongIds);
   const want = new Set(dongIds);
-  let added = 0;
   for (let ago = LOOKBACK_DAYS; ago >= 1; ago--) {
     const ymd = kstDate(ago);
     if (done.has(ymd)) continue;
@@ -135,72 +151,75 @@ async function collectDong(dongIds) {
       }
     }
     console.log(`[행정동] ${ymd}: ${n}행 저장`);
-    added += n;
   }
-  await saveCsv(file, map);
-  return { added, dates: [...new Set([...map.values()].map((f) => f[0]))].sort() };
+  return saveDir('dong', map);
 }
 
-async function collectCell(cellIds) {
-  const file = path.join(DATA, 'cell.csv');
-  const map = await loadCsv(file);
-  const done = datesWith(map, cellIds);
-  const want = new Set(cellIds);
-  let added = 0;
+// 핫플은 격자 여러 개의 합으로 저장한다. 격자 원본 행은 보관하지 않는다.
+async function collectPlace(places, prevDone) {
+  const map = await loadDir('place');
+  const cellToPlaces = new Map();
+  for (const p of places) for (const c of p.cells) cellToPlaces.set(c, [...(cellToPlaces.get(c) || []), p.id]);
+  // 수집 대상이 바뀌면 같은 날짜라도 다시 받도록 설정 지문을 함께 기록한다
+  const sig = createHash('sha1').update(JSON.stringify(places.map((p) => [p.id, p.cells]))).digest('hex').slice(0, 12);
+  const done = { ...prevDone };
 
   // 격자 API는 날짜를 고를 수 없고 하루치만 내려준다. 첫 쪽으로 날짜와 전체 건수를 확인한다.
   const first = await call(SVC_CELL, 1, PAGE);
   const ymd = clean(first.rows[0]?.YMD);
   if (!first.total || !ymd) {
-    console.log('[격자] 제공 중인 데이터 없음');
-  } else if (done.has(ymd)) {
-    console.log(`[격자] ${ymd}: 이미 수집됨 (전체 ${first.total}행 건너뜀)`);
+    console.log('[핫플] 제공 중인 격자 데이터 없음');
+  } else if (done[ymd] === sig) {
+    console.log(`[핫플] ${ymd}: 이미 수집됨 (전체 ${first.total}행 건너뜀)`);
   } else {
     const starts = [];
     for (let s = PAGE + 1; s <= first.total; s += PAGE) starts.push(s);
     const rest = await pool(starts, (s) => call(SVC_CELL, s, Math.min(s + PAGE - 1, first.total)));
+    const acc = new Map();
+    let used = 0;
     for (const { rows } of [first, ...rest]) {
       for (const row of rows) {
-        const id = clean(row.CELL_ID);
-        if (!want.has(id)) continue;
-        const rec = toRecord(row, id);
-        // 한 격자가 여러 행정동에 걸치면 행이 나뉘어 오므로 합산한다
-        const key = rec.slice(0, 3).join('|');
-        const prev = map.get(key);
-        if (prev && prev.fresh) {
-          for (let i = 3; i < rec.length; i++) {
-            if (rec[i] === '' && prev[i] === '') continue;
-            prev[i] = String(Math.round((Number(prev[i] || 0) + Number(rec[i] || 0)) * 100) / 100);
-          }
-        } else {
-          rec.fresh = true;
-          map.set(key, rec);
+        const ids = cellToPlaces.get(clean(row.CELL_ID));
+        if (!ids) continue;
+        used++;
+        const rowYmd = clean(row.YMD), tt = clean(row.TT).padStart(2, '0');
+        for (const id of ids) {
+          const key = [rowYmd, tt, id].join('|');
+          if (!acc.has(key)) acc.set(key, { head: [rowYmd, tt, id], sums: NUM_COLS.map(() => 0) });
+          const a = acc.get(key);
+          // 3명 이하로 가려진 값(*)은 0으로 더한다
+          NUM_COLS.forEach((c, i) => (a.sums[i] += Number(clean(row[c])) || 0));
         }
-        added++;
       }
     }
-    console.log(`[격자] ${ymd}: 전체 ${first.total}행 중 ${added}행 저장`);
+    for (const [key, a] of acc) map.set(key, [...a.head, ...a.sums.map((v) => String(Math.round(v * 10) / 10))]);
+    done[ymd] = sig;
+    console.log(`[핫플] ${ymd}: 전체 ${first.total}행 중 격자 ${used}행을 ${acc.size}행으로 합산`);
   }
-  await saveCsv(file, map);
-  return { added, dates: [...new Set([...map.values()].map((f) => f[0]))].sort() };
+  const info = await saveDir('place', map);
+  // 완료 기록은 최근 40일만 남긴다
+  info.done = Object.fromEntries(Object.entries(done).sort().slice(-40));
+  return info;
 }
 
 const areas = JSON.parse(await readFile(path.join(DATA, 'areas.json'), 'utf8'));
+const indexFile = path.join(DATA, 'index.json');
+const prev = existsSync(indexFile) ? JSON.parse(await readFile(indexFile, 'utf8')) : {};
+const index = { ...prev, updatedAt: new Date().toISOString() };
 const errors = [];
-const meta = { updatedAt: new Date().toISOString() };
 
-for (const [name, fn, ids] of [
-  ['dong', collectDong, areas.dongs.map((d) => d.id)],
-  ['cell', collectCell, areas.cells.map((c) => c.id)],
+for (const [name, fn] of [
+  ['dong', () => collectDong(areas.dongs.map((d) => d.id))],
+  ['place', () => collectPlace(areas.places, prev.place?.done || {})],
 ]) {
   try {
-    const r = await fn(ids);
-    meta[name] = { first: r.dates[0] || null, last: r.dates.at(-1) || null, days: r.dates.length };
+    index[name] = await fn();
   } catch (e) {
     console.error(`[${name}] 실패: ${e.message}`);
     errors.push(name);
   }
 }
 
-if (!errors.length) await writeFile(path.join(DATA, 'meta.json'), JSON.stringify(meta, null, 2) + '\n');
+// 한쪽이 실패해도 성공한 쪽의 결과는 남긴다
+await writeFile(indexFile, JSON.stringify(index, null, 2) + '\n');
 process.exit(errors.length ? 1 : 0);
