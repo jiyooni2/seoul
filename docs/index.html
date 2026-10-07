@@ -127,6 +127,7 @@ footer p { margin: 4px 0; }
   <div class="filters">
     <label>지역 <select id="area"></select></label>
     <label>날짜 <input type="date" id="date"></label>
+    <label>기준 시각 <select id="mapHour"></select></label>
     <div class="nav">
       <button id="prev" aria-label="이전 날짜">‹ 이전</button>
       <button id="next" aria-label="다음 날짜">다음 ›</button>
@@ -136,7 +137,6 @@ footer p { margin: 4px 0; }
   <section class="card mapcard">
     <div class="maphead">
       <div class="seg" role="group" aria-label="지역 단위"><button id="kPlace" type="button">핫플</button><button id="kDong" type="button">행정동</button></div>
-      <label>지도 기준 <select id="mapHour"></select></label>
       <div class="maplegend">
         <span><i class="dot" style="width:8px;height:8px"></i> <i class="dot" style="width:16px;height:16px"></i> 원 크기 = 인구</span>
         <span>색·숫자 = 여성 비율</span>
@@ -167,8 +167,8 @@ footer p { margin: 4px 0; }
       <div id="ageChart"></div>
     </section>
     <section class="card wide">
-      <h2>날짜별 정점 인구</h2>
-      <p class="desc">하루 중 인구가 가장 많았던 시간의 값입니다. 큰 점이 지금 보고 있는 날짜이고, 그래프를 누르면 그 날짜로 이동합니다.</p>
+      <h2 id="dayTitle">날짜별 19시 인구</h2>
+      <p class="desc">위에서 고른 기준 시각의 인구입니다. 큰 점이 지금 보고 있는 날짜이고, 그래프를 누르면 그 날짜로 이동합니다.</p>
       <div id="dayChart"></div>
     </section>
   </div>
@@ -205,7 +205,7 @@ const dowOf = (s) => new Date(ymdDash(s) + 'T00:00:00').getDay();
 const dateLabel = (s) => `${+s.slice(4,6)}월 ${+s.slice(6)}일(${DOW[dowOf(s)]})`;
 
 const store = {};   // areaId -> { ymd -> [24 rows|undefined] }
-let areas = [], dongShapes = {}, state = { area: null, date: null, hour: null, mapHour: 'peak' };
+let areas = [], dongShapes = {}, state = { area: null, date: null, hour: 19 };
 
 function parseCsv(text) {
   const lines = text.trim().split('\n');
@@ -237,6 +237,7 @@ async function load() {
   $('status').textContent = idx.updatedAt
     ? `마지막 수집 ${new Date(idx.updatedAt).toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'short' })} · 핫플 ${idx.place?.days ?? 0}일 치, 행정동 ${idx.dong?.days ?? 0}일 치 보관 중`
     : '';
+  $('mapHour').innerHTML = Array.from({ length: 24 }, (_, h) => `<option value="${h}">${h}시</option>`).join('');
   state.area = areas[0]?.id;
   state.date = dates().at(-1);
   initMap();
@@ -341,24 +342,24 @@ function render() {
   const ds = dates();
   if (!ds.includes(state.date)) state.date = ds.at(-1);
   const rows = day(state.date), peak = peakOf(rows), base = baseline(state.date);
-  if (state.hour == null && peak) state.hour = peak.tt;
   $('area').value = state.area;
   $('date').min = ymdDash(ds[0]); $('date').max = ymdDash(ds.at(-1)); $('date').value = ymdDash(state.date);
   const i = ds.indexOf(state.date);
   $('prev').disabled = i <= 0; $('next').disabled = i >= ds.length - 1;
 
   // 요약 타일
-  const tiles = [];
-  if (peak) {
-    tiles.push(['정점 인구', fmt(peak.spop) + '명', `${dateLabel(state.date)} ${peak.tt}시`]);
-    const b = base?.avg[peak.tt];
+  const tiles = [], H = state.hour, ref = rows[H];
+  $('mapHour').value = H;
+  if (ref) {
+    tiles.push([`${H}시 인구`, fmt(ref.spop) + '명', dateLabel(state.date)]);
+    const b = base?.avg[H];
     if (b) {
-      const diff = (peak.spop / b - 1) * 100;
-      tiles.push([`${DOW[dowOf(state.date)]}요일 평균 대비`, (diff >= 0 ? '+' : '−') + Math.abs(diff).toFixed(1) + '%', `같은 요일 ${base.n}일 평균 ${fmt(b)}명 (${peak.tt}시)`]);
+      const diff = (ref.spop / b - 1) * 100;
+      tiles.push([`${DOW[dowOf(state.date)]}요일 평균 대비`, (diff >= 0 ? '+' : '−') + Math.abs(diff).toFixed(1) + '%', `같은 요일 ${base.n}일 평균 ${fmt(b)}명 (${H}시)`]);
     } else tiles.push(['같은 요일 평균 대비', '—', '비교할 같은 요일 데이터가 아직 없습니다']);
-    tiles.push(['정점 시각 여성 비율', pct((peak.f / (peak.m + peak.f)) * 100), `남성 ${fmt(peak.m)}명 · 여성 ${fmt(peak.f)}명`]);
-    const night = rows[21];
-    if (night) tiles.push(['21시 인구', fmt(night.spop) + '명', `여성 ${pct((night.f / (night.m + night.f)) * 100)}`]);
+    tiles.push([`${H}시 여성 비율`, pct((ref.f / (ref.m + ref.f)) * 100), `남성 ${fmt(ref.m)}명 · 여성 ${fmt(ref.f)}명`]);
+    const young = ['20', '25', '30', '35'].reduce((t, k) => t + (ref.age['m' + k] || 0) + (ref.age['f' + k] || 0), 0);
+    tiles.push([`${H}시 20·30대 비중`, pct((young / (ref.m + ref.f)) * 100), peak ? `참고: 하루 최대는 ${peak.tt}시 ${fmt(peak.spop)}명` : '']);
   }
   $('tiles').innerHTML = tiles.map(([k, v, n]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="n">${n}</div></div>`).join('');
 
@@ -381,9 +382,13 @@ function drawHour(rows, base, peak) {
   const y = yAxis(f, 0, ticks.at(-1), ticks, fmt), x = hourAxis(f);
   if (base) path(f, base.avg.map((v, h) => (v == null ? null : [x(h), y(v)])), 'var(--ref)', true);
   path(f, Array.from({ length: 24 }, (_, h) => (rows[h] ? [x(h), y(rows[h].spop)] : null)), 'var(--s1)');
-  el('circle', { cx: x(peak.tt), cy: y(peak.spop), r: 4, fill: 'var(--s1)', stroke: 'var(--surface)', 'stroke-width': 2 }, f.svg);
-  const anchor = peak.tt > 19 ? 'end' : peak.tt < 4 ? 'start' : 'middle';
-  el('text', { x: x(peak.tt), y: y(peak.spop) - 10, 'text-anchor': anchor, class: 'lbl' }, f.svg).textContent = `${peak.tt}시 ${fmt(peak.spop)}명`;
+  const sel = rows[state.hour];
+  if (sel) {
+    el('line', { x1: x(sel.tt), x2: x(sel.tt), y1: f.y0, y2: f.y1, stroke: 'var(--axis)', 'stroke-width': 1, 'stroke-dasharray': '3 3' }, f.svg);
+    el('circle', { cx: x(sel.tt), cy: y(sel.spop), r: 4, fill: 'var(--s1)', stroke: 'var(--surface)', 'stroke-width': 2 }, f.svg);
+    const anchor = sel.tt > 19 ? 'end' : sel.tt < 4 ? 'start' : 'middle';
+    el('text', { x: x(sel.tt), y: y(sel.spop) - 10, 'text-anchor': anchor, class: 'lbl' }, f.svg).textContent = `${sel.tt}시 ${fmt(sel.spop)}명`;
+  }
   crosshair(f, Array.from({ length: 24 }, (_, h) => x(h)), (h) => {
     const r = rows[h]; if (!r) return null;
     const b = base?.avg[h];
@@ -411,8 +416,8 @@ function drawSex(rows) {
 
 function drawAge(rows) {
   const host = $('ageChart'), r = rows[state.hour];
-  $('hour').value = state.hour ?? 0;
-  $('hourLabel').textContent = `${state.hour ?? 0}시 기준`;
+  $('hour').value = state.hour;
+  $('hourLabel').textContent = `${state.hour}시 기준`;
   if (!r) return (host.innerHTML = '<p class="empty">데이터가 없습니다.</p>');
   const bands = BANDS.map(([name, keys]) => ({ name, m: keys.reduce((s, k) => s + (r.age['m' + k] || 0), 0), f: keys.reduce((s, k) => s + (r.age['f' + k] || 0), 0) }));
   const f = frame(host, { W: 520, H: 222, ml: 48 });
@@ -435,7 +440,8 @@ function drawAge(rows) {
 
 function drawDays(ds) {
   const host = $('dayChart');
-  const peaks = ds.map((d) => peakOf(day(d)));
+  const peaks = ds.map((d) => day(d)[state.hour] || null);
+  $('dayTitle').textContent = `날짜별 ${state.hour}시 인구`;
   if (ds.length < 2) return (host.innerHTML = `<p class="empty">아직 ${ds.length}일 치만 있습니다. 수집이 쌓이면 날짜별 추이가 표시됩니다.</p>`);
   const f = frame(host, { H: 220 });
   const ticks = niceTicks(Math.max(...peaks.map((p) => p?.spop || 0)));
@@ -448,8 +454,8 @@ function drawDays(ds) {
   if (peaks[si]) el('circle', { cx: x(si), cy: y(peaks[si].spop), r: 5, fill: 'var(--s1)', stroke: 'var(--surface)', 'stroke-width': 2 }, f.svg);
   crosshair(f, ds.map((_, i) => x(i)), (i) => {
     const p = peaks[i]; if (!p) return null;
-    return { marks: [[y(p.spop), 'var(--s1)']], html: `<b>${dateLabel(ds[i])}</b>` + tipRow('var(--s1)', '정점', fmt(p.spop) + '명') + tipRow('', '시각', p.tt + '시') };
-  }, (i) => { state.date = ds[i]; state.hour = null; render(); });
+    return { marks: [[y(p.spop), 'var(--s1)']], html: `<b>${dateLabel(ds[i])}</b>` + tipRow('var(--s1)', `${state.hour}시`, fmt(p.spop) + '명') };
+  }, (i) => { state.date = ds[i]; render(); });
 }
 
 // ---------- 지도 ----------
@@ -468,7 +474,7 @@ const sexBin = (fem) => SEX_BINS.find((b) => fem < b.max);
 const sexColor = (fem) => sexBin(fem).color;
 function summary(id) {
   const d = store[id]?.[state.date] || [];
-  const r = state.mapHour === 'peak' ? peakOf(d) : d[+state.mapHour];
+  const r = d[state.hour];
   if (!r || !(r.m + r.f > 0)) return null;
   const young = ['20', '25', '30', '35'].reduce((s, k) => s + (r.age['m' + k] || 0) + (r.age['f' + k] || 0), 0);
   const same = Object.keys(store[id]).filter((x) => x !== state.date && dowOf(x) === dowOf(state.date)).map((x) => store[id][x][r.tt]?.spop).filter((v) => v != null);
@@ -478,13 +484,12 @@ function summary(id) {
 function summaryHtml(x, s) {
   const row = (k, v) => `<div class="r"><span>${k}</span><b>${v}</b></div>`;
   if (!s) return `<div class="t">${x.label}</div><div>이 날짜의 데이터가 없습니다.</div>`;
-  const compact = `<div class="c">${state.mapHour === 'peak' ? s.tt + '시 ' : ''}${fmt(s.pop)}명 · 여성 ${pct(s.fem)} · 20·30대 ${pct(s.young)}</div>`;
-  return `<div class="t">${x.label}</div>` + compact + row(state.mapHour === 'peak' ? `정점 인구 (${s.tt}시)` : `${s.tt}시 인구`, fmt(s.pop) + '명') +
+  const compact = `<div class="c">${s.tt}시 ${fmt(s.pop)}명 · 여성 ${pct(s.fem)} · 20·30대 ${pct(s.young)}</div>`;
+  return `<div class="t">${x.label}</div>` + compact + row(`${s.tt}시 인구`, fmt(s.pop) + '명') +
     row('여성 비율', pct(s.fem)) + row('20·30대 비중', pct(s.young)) +
     (s.diff != null ? row(`${DOW[dowOf(state.date)]}요일 평균 대비`, (s.diff >= 0 ? '+' : '−') + Math.abs(s.diff).toFixed(1) + '%') : '');
 }
 function initMap() {
-  $('mapHour').innerHTML = '<option value="peak">하루 정점</option>' + Array.from({ length: 24 }, (_, h) => `<option value="${h}">${h}시</option>`).join('');
   $('scale').innerHTML = SEX_BINS.map((b) => `<i style="background:${b.color}" title="여성 ${b.label}"></i>`).join('');
   if (!window.L) return ($('map').innerHTML = '<p class="empty">지도를 불러오지 못했습니다. 아래 지역 비교 표를 이용해 주세요.</p>');
   map = L.map('map', { scrollWheelZoom: false, zoomSnap: 0.5 });
@@ -508,11 +513,10 @@ function initMap() {
   new ResizeObserver(() => map.invalidateSize()).observe($('map'));
   zoomClass();
 }
-function pick(id) { state.area = id; state.hour = null; render(); }
+function pick(id) { state.area = id; render(); }
 function drawMap() {
   const cur = areas.find((x) => x.id === state.area), kind = cur?.kind;
   $('kPlace').classList.toggle('on', kind === 'place'); $('kDong').classList.toggle('on', kind === 'dong');
-  $('mapHour').value = state.mapHour;
   if (!map) return;
   layer.clearLayers();
   const list = areas.filter((x) => x.kind === kind).map((x) => ({ x, s: summary(x.id) }));
@@ -529,7 +533,7 @@ function drawMap() {
       const radius = s ? 5 + big * Math.sqrt(s.pop / max) : 5;
       mark = L.circleMarker(x.center, { radius, fillColor: fill, fillOpacity: s ? 0.95 : 0,
         color: on ? PAL.ink : PAL.ring, weight: on ? 3 : 2 });
-      const text = `<b>${x.label}</b>` + (s ? `<span>${state.mapHour === 'peak' ? s.tt + '시 ' : ''}${fmt(s.pop)}명 · 여성 ${Math.round(s.fem)}%</span>` : '');
+      const text = `<b>${x.label}</b>` + (s ? `<span>${fmt(s.pop)}명 · 여성 ${Math.round(s.fem)}%</span>` : '');
       // 원이 충분히 크면 여성 비율 숫자를 원 안에 적는다
       if (s && radius >= 12) L.marker(x.center, { interactive: false, zIndexOffset: Math.round(s.pop), icon: L.divIcon({ className: '', iconSize: [0, 0], html: `<div class="pnum" style="color:${sexBin(s.fem).text}">${Math.round(s.fem)}${radius >= 15 ? '%' : ''}</div>` }) }).addTo(layer);
       L.marker(x.center, { interactive: false, zIndexOffset: 100000, icon: L.divIcon({ className: '', iconSize: [0, 0], html: `<div class="plabel${on ? ' on' : ''}" style="--dx:${Math.round(radius + 6)}px">${text}</div>` }) }).addTo(layer);
@@ -553,17 +557,18 @@ function switchKind(kind) {
 function drawRank() {
   const kind = areas.find((x) => x.id === state.area)?.kind, list = areas.filter((x) => x.kind === kind);
   $('rankTitle').textContent = kind === 'place' ? '핫플 비교' : '행정동 비교';
-  $('rankDesc').textContent = `${dateLabel(state.date)} 기준, 정점 인구가 많은 순서입니다. 행을 누르면 그 지역으로 바뀝니다.` + (kind === 'place' ? ' 핫플마다 묶은 격자 수(1~4개)가 달라 인구 크기는 참고용이고, 시각·성비·연령 비중은 그대로 비교할 수 있습니다.' : '');
+  const H = state.hour;
+  $('rankDesc').textContent = `${dateLabel(state.date)} ${H}시 기준, 인구가 많은 순서입니다. 행을 누르면 그 지역으로 바뀝니다.` + (kind === 'place' ? ' 핫플마다 묶은 격자 수(1~4개)가 달라 인구 크기는 참고용이고, 성비·연령 비중은 그대로 비교할 수 있습니다.' : '');
   const rowsOf = list.map((x) => {
-    const d = store[x.id]?.[state.date] || [], p = peakOf(d);
-    if (!p) return null;
-    const young = ['20', '25', '30', '35'].reduce((s, k) => s + (p.age['m' + k] || 0) + (p.age['f' + k] || 0), 0);
-    return { x, p, night: d[21], fem: (p.f / (p.m + p.f)) * 100, young: (young / (p.m + p.f)) * 100 };
-  }).filter(Boolean).sort((a, b) => b.p.spop - a.p.spop);
-  if (!rowsOf.length) return ($('rank').innerHTML = '<p class="empty">이 날짜의 데이터가 없습니다.</p>');
-  const max = rowsOf[0].p.spop;
-  $('rank').innerHTML = '<table class="rank"><thead><tr><th>지역</th><th class="barcell">정점 인구(명)</th><th>정점 시각</th><th>21시 인구(명)</th><th>여성 비율</th><th>20·30대 비중</th></tr></thead><tbody>' +
-    rowsOf.map((r) => `<tr data-id="${r.x.id}" class="${r.x.id === state.area ? 'on' : ''}"><td>${r.x.label}</td><td class="barcell"><span class="bar" style="width:${Math.max(2, (r.p.spop / max) * 110)}px"></span>${fmt(r.p.spop)}</td><td>${r.p.tt}시</td><td>${r.night ? fmt(r.night.spop) : '—'}</td><td>${pct(r.fem)}</td><td>${pct(r.young)}</td></tr>`).join('') +
+    const d = store[x.id]?.[state.date] || [], r = d[H], pk = peakOf(d);
+    if (!r || !(r.m + r.f > 0)) return null;
+    const young = ['20', '25', '30', '35'].reduce((t, k) => t + (r.age['m' + k] || 0) + (r.age['f' + k] || 0), 0);
+    return { x, r, pk, fem: (r.f / (r.m + r.f)) * 100, young: (young / (r.m + r.f)) * 100 };
+  }).filter(Boolean).sort((a, b) => b.r.spop - a.r.spop);
+  if (!rowsOf.length) return ($('rank').innerHTML = '<p class="empty">이 날짜·시각의 데이터가 없습니다.</p>');
+  const max = rowsOf[0].r.spop;
+  $('rank').innerHTML = `<table class="rank"><thead><tr><th>지역</th><th class="barcell">${H}시 인구(명)</th><th>여성 비율</th><th>20·30대 비중</th><th>참고: 하루 최대</th></tr></thead><tbody>` +
+    rowsOf.map((o) => `<tr data-id="${o.x.id}" class="${o.x.id === state.area ? 'on' : ''}"><td>${o.x.label}</td><td class="barcell"><span class="bar" style="width:${Math.max(2, (o.r.spop / max) * 110)}px"></span>${fmt(o.r.spop)}</td><td>${pct(o.fem)}</td><td>${pct(o.young)}</td><td>${o.pk.tt}시 ${fmt(o.pk.spop)}</td></tr>`).join('') +
     '</tbody></table>';
 }
 
@@ -577,20 +582,20 @@ function drawTable(rows, base) {
   $('table').innerHTML = h + '</tbody></table>';
 }
 
-$('rank').addEventListener('click', (e) => { const tr = e.target.closest('tr[data-id]'); if (!tr) return; state.area = tr.dataset.id; state.hour = null; render(); scrollTo({ top: 0, behavior: 'smooth' }); });
+$('rank').addEventListener('click', (e) => { const tr = e.target.closest('tr[data-id]'); if (!tr) return; state.area = tr.dataset.id; render(); scrollTo({ top: 0, behavior: 'smooth' }); });
 $('kPlace').addEventListener('click', () => switchKind('place'));
 $('kDong').addEventListener('click', () => switchKind('dong'));
-$('mapHour').addEventListener('change', (e) => { state.mapHour = e.target.value; drawMap(); });
-$('area').addEventListener('change', (e) => { state.area = e.target.value; state.hour = null; render(); });
+$('mapHour').addEventListener('change', (e) => { state.hour = +e.target.value; render(); });
+$('area').addEventListener('change', (e) => { state.area = e.target.value; render(); });
 $('date').addEventListener('change', (e) => {
   const want = e.target.value.replaceAll('-', ''), ds = dates();
   if (!want) return render();
   state.date = ds.includes(want) ? want : ds.reduce((a, b) => (Math.abs(+b - +want) < Math.abs(+a - +want) ? b : a));
-  state.hour = null; render();
+  render();
 });
-$('prev').addEventListener('click', () => { const ds = dates(); state.date = ds[ds.indexOf(state.date) - 1]; state.hour = null; render(); });
-$('next').addEventListener('click', () => { const ds = dates(); state.date = ds[ds.indexOf(state.date) + 1]; state.hour = null; render(); });
-$('hour').addEventListener('input', (e) => { state.hour = +e.target.value; drawAge(day(state.date)); });
+$('prev').addEventListener('click', () => { const ds = dates(); state.date = ds[ds.indexOf(state.date) - 1]; render(); });
+$('next').addEventListener('click', () => { const ds = dates(); state.date = ds[ds.indexOf(state.date) + 1]; render(); });
+$('hour').addEventListener('input', (e) => { state.hour = +e.target.value; render(); });
 
 let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => state.area && render(), 150); });
 
