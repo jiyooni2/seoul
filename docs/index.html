@@ -492,15 +492,13 @@ function summaryHtml(x, s) {
 function initMap() {
   $('scale').innerHTML = SEX_BINS.map((b) => `<i style="background:${b.color}" title="여성 ${b.label}"></i>`).join('');
   if (!window.L) return ($('map').innerHTML = '<p class="empty">지도를 불러오지 못했습니다. 아래 지역 비교 표를 이용해 주세요.</p>');
-  map = L.map('map', { scrollWheelZoom: false, zoomSnap: 0.5 });
+  // 커서가 지도 위에 있으면 휠(트랙패드 스크롤)로 바로 확대·축소된다
+  map = L.map('map', { scrollWheelZoom: true, zoomSnap: 0.5, wheelPxPerZoomLevel: 90 });
   // 키 없이 쓸 수 있는 OpenStreetMap 표준 타일
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   }).addTo(map);
-  // 페이지를 스크롤하다 지도가 확대되지 않도록, 지도를 한 번 누른 뒤에만 휠 확대를 켠다
-  map.on('click', () => map.scrollWheelZoom.enable());
-  $('map').addEventListener('mouseleave', () => map.scrollWheelZoom.disable());
   map.attributionControl.setPrefix('<a href="https://leafletjs.com">Leaflet</a>');
   layer = L.layerGroup().addTo(map);
   const Info = L.Control.extend({ onAdd() { info = L.DomUtil.create('div', 'mapinfo'); L.DomEvent.disableClickPropagation(info); return info; } });
