@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>서울 핫플 생활인구 기록</title>
+<link rel="stylesheet" href="vendor/leaflet.css">
 <style>
 :root {
   color-scheme: light;
@@ -49,7 +50,7 @@ button:disabled { opacity: .4; cursor: default; }
 .legend i { display: inline-block; width: 14px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 6px; }
 .legend i.dash { border-top-style: dashed; }
 .legend i.box { height: 10px; border: 0; border-radius: 2px; }
-svg { display: block; width: 100%; height: auto; overflow: visible; }
+svg:not(.leaflet-zoom-animated) { display: block; width: 100%; height: auto; overflow: visible; }
 svg text { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 svg .lbl { fill: var(--ink2); }
 .hourpick { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--ink2); margin-bottom: 6px; }
@@ -73,6 +74,35 @@ th { color: var(--ink2); font-weight: 600; }
 .rank tr.on td { background: color-mix(in srgb, var(--s1) 12%, transparent); font-weight: 600; }
 .rank .bar { display: inline-block; height: 8px; border-radius: 0 4px 4px 0; background: var(--s1); vertical-align: middle; margin-right: 8px; }
 .rank .barcell { text-align: left; min-width: 180px; }
+.mapcard { margin-bottom: 12px; padding: 12px; }
+.maphead { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; margin-bottom: 10px; }
+.maphead label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink2); }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; background: var(--surface); padding: 6px 14px; color: var(--ink2); }
+.seg button.on { background: var(--ink); color: var(--surface); font-weight: 600; }
+.maplegend { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink2); margin-left: auto; }
+.maplegend .scale { width: 90px; height: 8px; border-radius: 4px; }
+.maplegend .dot { display: inline-block; border-radius: 50%; border: 1.5px solid var(--muted); vertical-align: middle; }
+#map { height: 480px; border-radius: 8px; background: var(--page); z-index: 0; }
+@media (max-width: 760px) { #map { height: 380px; } .maplegend { margin-left: 0; } .mapinfo { display: none; } }
+.leaflet-container { font: inherit; }
+.leaflet-container .leaflet-control-attribution { background: color-mix(in srgb, var(--surface) 85%, transparent); color: var(--muted); font-size: 11px; }
+.leaflet-container .leaflet-control-attribution a { color: var(--ink2); }
+.plabel { white-space: nowrap; font-size: 12px; line-height: 1.25; color: var(--ink); pointer-events: none;
+  transform: translate(var(--dx, 14px), -50%); text-shadow: 0 0 3px var(--surface), 0 0 3px var(--surface), 0 0 3px var(--surface), 0 0 3px var(--surface); }
+.plabel b { font-weight: 650; }
+.plabel span { display: block; font-size: 11px; color: var(--ink2); }
+.zlow .plabel:not(.on) { display: none; }
+.zmid .plabel:not(.on) span { display: none; }
+.mapinfo { background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: 10px;
+  padding: 10px 12px; font-size: 12px; min-width: 190px; box-shadow: 0 2px 10px rgba(0,0,0,.12); }
+.mapinfo .t { font-size: 14px; font-weight: 650; margin-bottom: 4px; }
+.mapinfo .r, .sumtip .r { display: flex; justify-content: space-between; gap: 16px; }
+.mapinfo .r span:first-child, .sumtip .r span:first-child { color: var(--ink2); }
+.leaflet-tooltip.sumtip { background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.14); }
+.leaflet-tooltip.sumtip::before { display: none; }
+.sumtip .t { font-weight: 650; margin-bottom: 2px; }
 .empty { color: var(--muted); font-size: 13px; padding: 24px 0; text-align: center; }
 footer { margin-top: 24px; font-size: 12px; color: var(--muted); }
 footer p { margin: 4px 0; }
@@ -91,6 +121,18 @@ footer p { margin: 4px 0; }
       <button id="next" aria-label="다음 날짜">다음 ›</button>
     </div>
   </div>
+
+  <section class="card mapcard">
+    <div class="maphead">
+      <div class="seg" role="group" aria-label="지역 단위"><button id="kPlace" type="button">핫플</button><button id="kDong" type="button">행정동</button></div>
+      <label>지도 기준 <select id="mapHour"></select></label>
+      <div class="maplegend">
+        <span><i class="dot" style="width:8px;height:8px"></i> <i class="dot" style="width:16px;height:16px"></i> 인구</span>
+        <span>남성 많음</span><span class="scale" id="scale"></span><span>여성 많음</span>
+      </div>
+    </div>
+    <div id="map" aria-label="핫플 지도. 같은 내용은 아래 지역 비교 표에서도 볼 수 있습니다."></div>
+  </section>
 
   <div class="tiles" id="tiles"></div>
 
@@ -132,9 +174,11 @@ footer p { margin: 4px 0; }
 
   <footer>
     <p>출처: 서울 열린데이터광장(서울특별시), 서울 생활인구(250m) 내국인. 공공누리 제1유형.</p>
+    <p>지도: © OpenStreetMap contributors, © CARTO. 행정동 경계: vuski/admdongkor.</p>
     <p>내국인만 집계된 추계 인구이며 약 4일 늦게 공개됩니다. 핫플 수치는 중심점 주변 250m 격자 1~4개를 합친 값이라 특정 거리만의 수치는 아닙니다.</p>
   </footer>
 </main>
+<script src="vendor/leaflet.js"></script>
 <div id="tip" role="status"></div>
 
 <script>
@@ -149,7 +193,7 @@ const dowOf = (s) => new Date(ymdDash(s) + 'T00:00:00').getDay();
 const dateLabel = (s) => `${+s.slice(4,6)}월 ${+s.slice(6)}일(${DOW[dowOf(s)]})`;
 
 const store = {};   // areaId -> { ymd -> [24 rows|undefined] }
-let areas = [], state = { area: null, date: null, hour: null };
+let areas = [], dongShapes = {}, state = { area: null, date: null, hour: null, mapHour: 'peak' };
 
 function parseCsv(text) {
   const lines = text.trim().split('\n');
@@ -167,7 +211,8 @@ function parseCsv(text) {
 function put(id, row) { ((store[id] ??= {})[row.ymd] ??= [])[row.tt] = row; }
 async function load() {
   const get = (f) => fetch('data/' + f, { cache: 'no-cache' }).then((r) => (r.ok ? r.text() : ''));
-  const [cfg, idxText] = await Promise.all([get('areas.json'), get('index.json')]);
+  const [cfg, idxText, geo] = await Promise.all([get('areas.json'), get('index.json'), get('dongs.geojson')]);
+  if (geo) for (const f of JSON.parse(geo).features) dongShapes[f.properties.id] = f.geometry.coordinates.map((poly) => poly.map((ring) => ring.map(([x, y]) => [y, x])));
   const a = JSON.parse(cfg), idx = idxText ? JSON.parse(idxText) : {};
   // 종류별로 최근 3개월 파일만 읽는다 (같은 요일 평균을 내기에 충분한 기간)
   const files = ['place', 'dong'].flatMap((k) => (idx[k]?.months || []).slice(-3).map((m) => `${k}/${m}.csv`));
@@ -182,6 +227,7 @@ async function load() {
     : '';
   state.area = areas[0]?.id;
   state.date = dates().at(-1);
+  initMap();
   render();
 }
 
@@ -310,6 +356,7 @@ function render() {
   drawDays(ds);
   drawTable(rows, base);
   drawRank();
+  drawMap();
 }
 
 function drawHour(rows, base, peak) {
@@ -393,6 +440,93 @@ function drawDays(ds) {
   }, (i) => { state.date = ds[i]; state.hour = null; render(); });
 }
 
+// ---------- 지도 ----------
+let map, layer, info;
+const DARK = matchMedia('(prefers-color-scheme: dark)').matches;
+const PAL = DARK ? { m: [57, 135, 229], mid: [107, 106, 102], f: [217, 89, 38], ink: '#ffffff', ring: '#1a1a19' }
+                 : { m: [42, 120, 214], mid: [201, 200, 194], f: [235, 104, 52], ink: '#0b0b0b', ring: '#fcfcfb' };
+const rgb = (c) => `rgb(${c.map(Math.round).join(',')})`;
+// 여성 비율 50%를 회색 중간점으로, ±12%p에서 양 끝 색이 된다
+function sexColor(fem) {
+  const t = Math.max(-1, Math.min(1, (fem - 50) / 12)), end = t < 0 ? PAL.m : PAL.f, k = Math.abs(t);
+  return rgb(PAL.mid.map((v, i) => v + (end[i] - v) * k));
+}
+function summary(id) {
+  const d = store[id]?.[state.date] || [];
+  const r = state.mapHour === 'peak' ? peakOf(d) : d[+state.mapHour];
+  if (!r || !(r.m + r.f > 0)) return null;
+  const young = ['20', '25', '30', '35'].reduce((s, k) => s + (r.age['m' + k] || 0) + (r.age['f' + k] || 0), 0);
+  const same = Object.keys(store[id]).filter((x) => x !== state.date && dowOf(x) === dowOf(state.date)).map((x) => store[id][x][r.tt]?.spop).filter((v) => v != null);
+  const avg = same.length ? same.reduce((a, b) => a + b, 0) / same.length : null;
+  return { pop: r.spop, tt: r.tt, fem: (r.f / (r.m + r.f)) * 100, young: (young / (r.m + r.f)) * 100, diff: avg ? (r.spop / avg - 1) * 100 : null, n: same.length };
+}
+function summaryHtml(x, s) {
+  const row = (k, v) => `<div class="r"><span>${k}</span><b>${v}</b></div>`;
+  if (!s) return `<div class="t">${x.label}</div><div>이 날짜의 데이터가 없습니다.</div>`;
+  return `<div class="t">${x.label}</div>` + row(state.mapHour === 'peak' ? `정점 인구 (${s.tt}시)` : `${s.tt}시 인구`, fmt(s.pop) + '명') +
+    row('여성 비율', pct(s.fem)) + row('20·30대 비중', pct(s.young)) +
+    (s.diff != null ? row(`${DOW[dowOf(state.date)]}요일 평균 대비`, (s.diff >= 0 ? '+' : '−') + Math.abs(s.diff).toFixed(1) + '%') : '');
+}
+function initMap() {
+  $('mapHour').innerHTML = '<option value="peak">하루 정점</option>' + Array.from({ length: 24 }, (_, h) => `<option value="${h}">${h}시</option>`).join('');
+  $('scale').style.background = `linear-gradient(90deg, ${rgb(PAL.m)}, ${rgb(PAL.mid)}, ${rgb(PAL.f)})`;
+  if (!window.L) return ($('map').innerHTML = '<p class="empty">지도를 불러오지 못했습니다. 아래 지역 비교 표를 이용해 주세요.</p>');
+  map = L.map('map', { scrollWheelZoom: false, zoomSnap: 0.5 });
+  L.tileLayer(`https://{s}.basemaps.cartocdn.com/${DARK ? 'dark_all' : 'light_all'}/{z}/{x}/{y}{r}.png`, {
+    maxZoom: 18, subdomains: 'abcd',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+  }).addTo(map);
+  // 페이지를 스크롤하다 지도가 확대되지 않도록, 지도를 한 번 누른 뒤에만 휠 확대를 켠다
+  map.on('click', () => map.scrollWheelZoom.enable());
+  $('map').addEventListener('mouseleave', () => map.scrollWheelZoom.disable());
+  map.attributionControl.setPrefix('<a href="https://leafletjs.com">Leaflet</a>');
+  layer = L.layerGroup().addTo(map);
+  const Info = L.Control.extend({ onAdd() { info = L.DomUtil.create('div', 'mapinfo'); L.DomEvent.disableClickPropagation(info); return info; } });
+  new Info({ position: 'topright' }).addTo(map);
+  const zoomClass = () => { const z = map.getZoom(), c = $('map').classList; c.toggle('zlow', z < 13); c.toggle('zmid', z >= 13 && z < 14); };
+  map.on('zoomend', zoomClass);
+  map.fitBounds(L.latLngBounds(areas.filter((x) => x.kind === 'place').map((x) => x.center)).pad(0.08));
+  zoomClass();
+}
+function pick(id) { state.area = id; state.hour = null; render(); }
+function drawMap() {
+  const cur = areas.find((x) => x.id === state.area), kind = cur?.kind;
+  $('kPlace').classList.toggle('on', kind === 'place'); $('kDong').classList.toggle('on', kind === 'dong');
+  $('mapHour').value = state.mapHour;
+  if (!map) return;
+  layer.clearLayers();
+  const list = areas.filter((x) => x.kind === kind).map((x) => ({ x, s: summary(x.id) }));
+  const max = Math.max(1, ...list.map((o) => o.s?.pop || 0));
+  info.innerHTML = summaryHtml(cur, summary(cur.id)) + `<div style="color:var(--muted);margin-top:4px">${dateLabel(state.date)}</div>`;
+  // 큰 원이 작은 원을 가리지 않게 큰 것부터 그린다
+  list.sort((a, b) => (b.s?.pop || 0) - (a.s?.pop || 0));
+  for (const { x, s } of list) {
+    const on = x.id === state.area, fill = s ? sexColor(s.fem) : 'transparent';
+    let mark;
+    if (kind === 'place') {
+      if (on) L.polygon(x.boxes, { color: PAL.ink, weight: 1, dashArray: '4 4', fill: false, interactive: false }).addTo(layer);
+      const radius = s ? 6 + 20 * Math.sqrt(s.pop / max) : 5;
+      mark = L.circleMarker(x.center, { radius, fillColor: fill, fillOpacity: s ? 0.9 : 0,
+        color: on ? PAL.ink : PAL.ring, weight: on ? 3 : 2 });
+      const text = `<b>${x.label}</b>` + (s ? `<span>${state.mapHour === 'peak' ? s.tt + '시 ' : ''}${fmt(s.pop)}명 · 여성 ${Math.round(s.fem)}%</span>` : '');
+      L.marker(x.center, { interactive: false, icon: L.divIcon({ className: '', iconSize: [0, 0], html: `<div class="plabel${on ? ' on' : ''}" style="--dx:${Math.round(radius + 6)}px">${text}</div>` }) }).addTo(layer);
+    } else {
+      if (!dongShapes[x.id]) continue;
+      mark = L.polygon(dongShapes[x.id], { fillColor: fill, fillOpacity: s ? 0.6 : 0, color: on ? PAL.ink : rgb(PAL.mid), weight: on ? 3 : 1.5 });
+    }
+    mark.bindTooltip(`<div>${summaryHtml(x, s)}</div>`, { className: 'sumtip', direction: 'top', sticky: kind === 'dong', opacity: 1 });
+    mark.on('click', () => pick(x.id));
+    mark.addTo(layer);
+    if (on) mark.bringToFront();
+  }
+}
+function switchKind(kind) {
+  const cur = areas.find((x) => x.id === state.area);
+  if (!cur || cur.kind === kind) return;
+  const next = kind === 'dong' ? areas.find((x) => x.kind === 'dong' && x.id === cur.dong) : areas.find((x) => x.kind === 'place' && x.dong === cur.id);
+  pick((next || areas.find((x) => x.kind === kind)).id);
+}
+
 function drawRank() {
   const kind = areas.find((x) => x.id === state.area)?.kind, list = areas.filter((x) => x.kind === kind);
   $('rankTitle').textContent = kind === 'place' ? '핫플 비교' : '행정동 비교';
@@ -421,6 +555,9 @@ function drawTable(rows, base) {
 }
 
 $('rank').addEventListener('click', (e) => { const tr = e.target.closest('tr[data-id]'); if (!tr) return; state.area = tr.dataset.id; state.hour = null; render(); scrollTo({ top: 0, behavior: 'smooth' }); });
+$('kPlace').addEventListener('click', () => switchKind('place'));
+$('kDong').addEventListener('click', () => switchKind('dong'));
+$('mapHour').addEventListener('change', (e) => { state.mapHour = e.target.value; drawMap(); });
 $('area').addEventListener('change', (e) => { state.area = e.target.value; state.hour = null; render(); });
 $('date').addEventListener('change', (e) => {
   const want = e.target.value.replaceAll('-', ''), ds = dates();
