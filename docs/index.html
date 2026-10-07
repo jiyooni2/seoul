@@ -80,8 +80,12 @@ th { color: var(--ink2); font-weight: 600; }
 .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 .seg button { border: 0; border-radius: 0; background: var(--surface); padding: 6px 14px; color: var(--ink2); }
 .seg button.on { background: var(--ink); color: var(--surface); font-weight: 600; }
-.maplegend { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink2); margin-left: auto; }
-.maplegend .scale { width: 90px; height: 8px; border-radius: 4px; }
+.maplegend > span { white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; }
+.maplegend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 12px; color: var(--ink2); margin-left: auto; }
+.maplegend .scale { display: inline-flex; gap: 2px; }
+.maplegend .scale i { width: 18px; height: 10px; border-radius: 2px; }
+.leaflet-tile-pane { filter: grayscale(0.7) brightness(1.04); }
+.pnum { position: absolute; left: 0; top: 0; width: max-content; font-size: 11px; font-weight: 700; line-height: 1; pointer-events: none; transform: translate(-50%, -50%); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .maplegend .dot { display: inline-block; border-radius: 50%; border: 1.5px solid var(--muted); vertical-align: middle; }
 #map { height: 480px; border-radius: 8px; background: var(--page); z-index: 0; }
 }
@@ -134,8 +138,9 @@ footer p { margin: 4px 0; }
       <div class="seg" role="group" aria-label="지역 단위"><button id="kPlace" type="button">핫플</button><button id="kDong" type="button">행정동</button></div>
       <label>지도 기준 <select id="mapHour"></select></label>
       <div class="maplegend">
-        <span><i class="dot" style="width:8px;height:8px"></i> <i class="dot" style="width:16px;height:16px"></i> 인구</span>
-        <span>남성 많음</span><span class="scale" id="scale"></span><span>여성 많음</span>
+        <span><i class="dot" style="width:8px;height:8px"></i> <i class="dot" style="width:16px;height:16px"></i> 원 크기 = 인구</span>
+        <span>색·숫자 = 여성 비율</span>
+        <span>낮음 <span class="scale" id="scale"></span> 높음</span>
       </div>
     </div>
     <div id="map" aria-label="핫플 지도. 같은 내용은 아래 지역 비교 표에서도 볼 수 있습니다."></div>
@@ -450,13 +455,17 @@ function drawDays(ds) {
 // ---------- 지도 ----------
 let map, layer, info;
 // 배경 지도가 항상 밝은 색이므로 지도 위 색은 화면 테마와 상관없이 밝은 배경 기준으로 고정한다
-const PAL = { m: [42, 120, 214], mid: [176, 175, 168], f: [235, 104, 52], ink: '#0b0b0b', ring: '#ffffff' };
-const rgb = (c) => `rgb(${c.map(Math.round).join(',')})`;
-// 여성 비율 50%를 회색 중간점으로, ±12%p에서 양 끝 색이 된다
-function sexColor(fem) {
-  const t = Math.max(-1, Math.min(1, (fem - 50) / 12)), end = t < 0 ? PAL.m : PAL.f, k = Math.abs(t);
-  return rgb(PAL.mid.map((v, i) => v + (end[i] - v) * k));
-}
+const PAL = { ink: '#0b0b0b', ring: '#ffffff' };
+// 여성 비율을 5단계로 끊어 색을 정한다. 연속 그라데이션보다 한눈에 구분된다.
+const SEX_BINS = [
+  { max: 45, color: '#1c5cab', text: '#fff', label: '45% 미만' },
+  { max: 48, color: '#86b6ef', text: '#0b0b0b', label: '45~48%' },
+  { max: 52, color: '#b0afa8', text: '#0b0b0b', label: '48~52%' },
+  { max: 55, color: '#f5b08f', text: '#0b0b0b', label: '52~55%' },
+  { max: Infinity, color: '#d94a12', text: '#fff', label: '55% 이상' },
+];
+const sexBin = (fem) => SEX_BINS.find((b) => fem < b.max);
+const sexColor = (fem) => sexBin(fem).color;
 function summary(id) {
   const d = store[id]?.[state.date] || [];
   const r = state.mapHour === 'peak' ? peakOf(d) : d[+state.mapHour];
@@ -476,7 +485,7 @@ function summaryHtml(x, s) {
 }
 function initMap() {
   $('mapHour').innerHTML = '<option value="peak">하루 정점</option>' + Array.from({ length: 24 }, (_, h) => `<option value="${h}">${h}시</option>`).join('');
-  $('scale').style.background = `linear-gradient(90deg, ${rgb(PAL.m)}, ${rgb(PAL.mid)}, ${rgb(PAL.f)})`;
+  $('scale').innerHTML = SEX_BINS.map((b) => `<i style="background:${b.color}" title="여성 ${b.label}"></i>`).join('');
   if (!window.L) return ($('map').innerHTML = '<p class="empty">지도를 불러오지 못했습니다. 아래 지역 비교 표를 이용해 주세요.</p>');
   map = L.map('map', { scrollWheelZoom: false, zoomSnap: 0.5 });
   // 키 없이 쓸 수 있는 OpenStreetMap 표준 타일
@@ -518,13 +527,15 @@ function drawMap() {
       if (on) L.polygon(x.boxes, { color: PAL.ink, weight: 1, dashArray: '4 4', fill: false, interactive: false }).addTo(layer);
       const big = $('map').clientWidth < 520 ? 13 : 20;
       const radius = s ? 5 + big * Math.sqrt(s.pop / max) : 5;
-      mark = L.circleMarker(x.center, { radius, fillColor: fill, fillOpacity: s ? 0.85 : 0,
+      mark = L.circleMarker(x.center, { radius, fillColor: fill, fillOpacity: s ? 0.95 : 0,
         color: on ? PAL.ink : PAL.ring, weight: on ? 3 : 2 });
       const text = `<b>${x.label}</b>` + (s ? `<span>${state.mapHour === 'peak' ? s.tt + '시 ' : ''}${fmt(s.pop)}명 · 여성 ${Math.round(s.fem)}%</span>` : '');
-      L.marker(x.center, { interactive: false, icon: L.divIcon({ className: '', iconSize: [0, 0], html: `<div class="plabel${on ? ' on' : ''}" style="--dx:${Math.round(radius + 6)}px">${text}</div>` }) }).addTo(layer);
+      // 원이 충분히 크면 여성 비율 숫자를 원 안에 적는다
+      if (s && radius >= 12) L.marker(x.center, { interactive: false, zIndexOffset: Math.round(s.pop), icon: L.divIcon({ className: '', iconSize: [0, 0], html: `<div class="pnum" style="color:${sexBin(s.fem).text}">${Math.round(s.fem)}${radius >= 15 ? '%' : ''}</div>` }) }).addTo(layer);
+      L.marker(x.center, { interactive: false, zIndexOffset: 100000, icon: L.divIcon({ className: '', iconSize: [0, 0], html: `<div class="plabel${on ? ' on' : ''}" style="--dx:${Math.round(radius + 6)}px">${text}</div>` }) }).addTo(layer);
     } else {
       if (!dongShapes[x.id]) continue;
-      mark = L.polygon(dongShapes[x.id], { fillColor: fill, fillOpacity: s ? 0.6 : 0, color: on ? PAL.ink : '#6b6a66', weight: on ? 3 : 1 });
+      mark = L.polygon(dongShapes[x.id], { fillColor: fill, fillOpacity: s ? 0.75 : 0, color: on ? PAL.ink : '#52514e', weight: on ? 3 : 1 });
     }
     mark.bindTooltip(`<div>${summaryHtml(x, s)}</div>`, { className: 'sumtip', direction: 'top', sticky: kind === 'dong', opacity: 1 });
     mark.on('click', () => pick(x.id));
