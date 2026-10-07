@@ -1,6 +1,6 @@
 // 서울 생활인구(250m) 수집기
 // - 행정동: 최근 LOOKBACK_DAYS일 중 비어 있는 날짜를 시간대별로 조회
-// - 핫플: 격자 API가 제공하는 하루치(약 4일 전)를 전부 넘겨 받아, 핫플별 격자 묶음의 합만 보관
+// - 주요지역: 격자 API가 제공하는 하루치(약 4일 전)를 전부 넘겨 받아, 주요지역별 격자 묶음의 합만 보관
 // 수집 대상은 docs/data/areas.json 에서 정한다.
 // 실행: SEOUL_API_KEY=... node scripts/collect.mjs
 import { readFile, writeFile, readdir, mkdir } from 'node:fs/promises';
@@ -155,7 +155,7 @@ async function collectDong(dongIds) {
   return saveDir('dong', map);
 }
 
-// 핫플은 격자 여러 개의 합으로 저장한다. 격자 원본 행은 보관하지 않는다.
+// 주요지역은 격자 여러 개의 합으로 저장한다. 격자 원본 행은 보관하지 않는다.
 async function collectPlace(places, prevDone) {
   const map = await loadDir('place');
   const cellToPlaces = new Map();
@@ -168,9 +168,9 @@ async function collectPlace(places, prevDone) {
   const first = await call(SVC_CELL, 1, PAGE);
   const ymd = clean(first.rows[0]?.YMD);
   if (!first.total || !ymd) {
-    console.log('[핫플] 제공 중인 격자 데이터 없음');
+    console.log('[주요지역] 제공 중인 격자 데이터 없음');
   } else if (done[ymd] === sig) {
-    console.log(`[핫플] ${ymd}: 이미 수집됨 (전체 ${first.total}행 건너뜀)`);
+    console.log(`[주요지역] ${ymd}: 이미 수집됨 (전체 ${first.total}행 건너뜀)`);
   } else {
     const starts = [];
     for (let s = PAGE + 1; s <= first.total; s += PAGE) starts.push(s);
@@ -194,7 +194,7 @@ async function collectPlace(places, prevDone) {
     }
     for (const [key, a] of acc) map.set(key, [...a.head, ...a.sums.map((v) => String(Math.round(v * 10) / 10))]);
     done[ymd] = sig;
-    console.log(`[핫플] ${ymd}: 전체 ${first.total}행 중 격자 ${used}행을 ${acc.size}행으로 합산`);
+    console.log(`[주요지역] ${ymd}: 전체 ${first.total}행 중 격자 ${used}행을 ${acc.size}행으로 합산`);
   }
   const info = await saveDir('place', map);
   // 완료 기록은 최근 40일만 남긴다

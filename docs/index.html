@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>서울 핫플 생활인구 기록</title>
+<title>서울 주요지역 생활인구 기록</title>
 <link rel="stylesheet" href="vendor/leaflet.css">
 <style>
 :root {
@@ -121,7 +121,7 @@ footer p { margin: 4px 0; }
 </head>
 <body>
 <main>
-  <h1>서울 핫플 생활인구 기록</h1>
+  <h1>서울 주요지역 생활인구 기록</h1>
   <p class="sub" id="status">데이터를 불러오는 중입니다.</p>
 
   <div class="filters">
@@ -136,14 +136,14 @@ footer p { margin: 4px 0; }
 
   <section class="card mapcard">
     <div class="maphead">
-      <div class="seg" role="group" aria-label="지역 단위"><button id="kPlace" type="button">핫플</button><button id="kDong" type="button">행정동</button></div>
+      <div class="seg" role="group" aria-label="지역 단위"><button id="kPlace" type="button">주요지역</button><button id="kDong" type="button">행정동</button></div>
       <div class="maplegend">
         <span><i class="dot" style="width:8px;height:8px"></i> <i class="dot" style="width:16px;height:16px"></i> 원 크기 = 인구</span>
         <span>색·숫자 = 여성 비율</span>
         <span>낮음 <span class="scale" id="scale"></span> 높음</span>
       </div>
     </div>
-    <div id="map" aria-label="핫플 지도. 같은 내용은 아래 지역 비교 표에서도 볼 수 있습니다."></div>
+    <div id="map" aria-label="주요지역 지도. 같은 내용은 아래 지역 비교 표에서도 볼 수 있습니다."></div>
   </section>
 
   <div class="tiles" id="tiles"></div>
@@ -187,7 +187,7 @@ footer p { margin: 4px 0; }
   <footer>
     <p>출처: 서울 열린데이터광장(서울특별시), 서울 생활인구(250m) 내국인. 공공누리 제1유형.</p>
     <p>지도: © OpenStreetMap contributors. 행정동 경계: vuski/admdongkor.</p>
-    <p>내국인만 집계된 추계 인구이며 약 4일 늦게 공개됩니다. 핫플 수치는 중심점 주변 250m 격자 1~4개를 합친 값이라 특정 거리만의 수치는 아닙니다.</p>
+    <p>내국인만 집계된 추계 인구이며 약 4일 늦게 공개됩니다. 주요지역 수치는 중심점 주변 250m 격자 1~4개를 합친 값이라 특정 거리만의 수치는 아닙니다.</p>
   </footer>
 </main>
 <script src="vendor/leaflet.js"></script>
@@ -233,9 +233,9 @@ async function load() {
   const dongs = a.dongs.filter((x) => store[x.id]).map((x) => ({ ...x, kind: 'dong', label: `${x.label} (${x.near.join(', ')})` }));
   areas = [...places, ...dongs];
   const opts = (list) => list.map((x) => `<option value="${x.id}">${x.label}</option>`).join('');
-  $('area').innerHTML = `<optgroup label="핫플 중심 (250m 격자 묶음)">${opts(places)}</optgroup><optgroup label="핫플이 속한 행정동 전체">${opts(dongs)}</optgroup>`;
+  $('area').innerHTML = `<optgroup label="주요지역 중심 (250m 격자 묶음)">${opts(places)}</optgroup><optgroup label="주요지역이 속한 행정동 전체">${opts(dongs)}</optgroup>`;
   $('status').textContent = idx.updatedAt
-    ? `마지막 수집 ${new Date(idx.updatedAt).toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'short' })} · 핫플 ${idx.place?.days ?? 0}일 치, 행정동 ${idx.dong?.days ?? 0}일 치 보관 중`
+    ? `마지막 수집 ${new Date(idx.updatedAt).toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'short' })} · 주요지역 ${idx.place?.days ?? 0}일 치, 행정동 ${idx.dong?.days ?? 0}일 치 보관 중`
     : '';
   $('mapHour').innerHTML = Array.from({ length: 24 }, (_, h) => `<option value="${h}">${h}시</option>`).join('');
   state.area = areas[0]?.id;
@@ -529,8 +529,8 @@ function drawMap() {
     let mark;
     if (kind === 'place') {
       if (on) L.polygon(x.boxes, { color: PAL.ink, weight: 1, dashArray: '4 4', fill: false, interactive: false }).addTo(layer);
-      const big = $('map').clientWidth < 520 ? 13 : 20;
-      const radius = s ? 5 + big * Math.sqrt(s.pop / max) : 5;
+      const big = $('map').clientWidth < 520 ? 15 : 28;
+      const radius = s ? 7 + big * Math.sqrt(s.pop / max) : 6;
       mark = L.circleMarker(x.center, { radius, fillColor: fill, fillOpacity: s ? 0.95 : 0,
         color: on ? PAL.ink : PAL.ring, weight: on ? 3 : 2 });
       const text = `<b>${x.label}</b>` + (s ? `<span>${fmt(s.pop)}명 · 여성 ${Math.round(s.fem)}%</span>` : '');
@@ -556,9 +556,9 @@ function switchKind(kind) {
 
 function drawRank() {
   const kind = areas.find((x) => x.id === state.area)?.kind, list = areas.filter((x) => x.kind === kind);
-  $('rankTitle').textContent = kind === 'place' ? '핫플 비교' : '행정동 비교';
+  $('rankTitle').textContent = kind === 'place' ? '주요지역 비교' : '행정동 비교';
   const H = state.hour;
-  $('rankDesc').textContent = `${dateLabel(state.date)} ${H}시 기준, 인구가 많은 순서입니다. 행을 누르면 그 지역으로 바뀝니다.` + (kind === 'place' ? ' 핫플마다 묶은 격자 수(1~4개)가 달라 인구 크기는 참고용이고, 성비·연령 비중은 그대로 비교할 수 있습니다.' : '');
+  $('rankDesc').textContent = `${dateLabel(state.date)} ${H}시 기준, 인구가 많은 순서입니다. 행을 누르면 그 지역으로 바뀝니다.` + (kind === 'place' ? ' 주요지역마다 묶은 격자 수(1~4개)가 달라 인구 크기는 참고용이고, 성비·연령 비중은 그대로 비교할 수 있습니다.' : '');
   const rowsOf = list.map((x) => {
     const d = store[x.id]?.[state.date] || [], r = d[H], pk = peakOf(d);
     if (!r || !(r.m + r.f > 0)) return null;
