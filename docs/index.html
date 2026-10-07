@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>종로3가 생활인구 기록</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,.10);
+  --s1: #2a78d6; --s2: #eb6834; --ref: #898781;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,.10);
+    --s1: #3987e5; --s2: #d95926; --ref: #898781;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
+main { max-width: 1080px; margin: 0 auto; padding: 24px 16px 48px; }
+h1 { font-size: 22px; margin: 0 0 4px; }
+.sub { color: var(--ink2); margin: 0 0 20px; font-size: 14px; }
+.filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-bottom: 16px; }
+.filters label { display: grid; gap: 4px; font-size: 12px; color: var(--ink2); }
+select, input[type=date] { font: inherit; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; min-width: 0; max-width: 100%; }
+.nav { display: flex; gap: 6px; }
+button { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 7px 12px; cursor: pointer; }
+button:disabled { opacity: .4; cursor: default; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.tile, .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+.tile { padding: 14px 16px; }
+.tile .k { font-size: 12px; color: var(--ink2); }
+.tile .v { font-size: 28px; font-weight: 650; line-height: 1.2; margin-top: 2px; }
+.tile .n { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.card { padding: 16px; min-width: 0; }
+.card.wide { grid-column: 1 / -1; }
+@media (max-width: 760px) { .cards { grid-template-columns: minmax(0, 1fr); } }
+.card h2 { font-size: 15px; margin: 0; }
+.card .desc { font-size: 12px; color: var(--ink2); margin: 2px 0 8px; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--ink2); margin-bottom: 4px; }
+.legend i { display: inline-block; width: 14px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 6px; }
+.legend i.dash { border-top-style: dashed; }
+.legend i.box { height: 10px; border: 0; border-radius: 2px; }
+svg { display: block; width: 100%; height: auto; overflow: visible; }
+svg text { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+svg .lbl { fill: var(--ink2); }
+.hourpick { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--ink2); margin-bottom: 6px; }
+.hourpick input { flex: 1; max-width: 320px; accent-color: var(--s1); }
+#tip { position: fixed; pointer-events: none; background: var(--surface); color: var(--ink);
+  border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.14); display: none; z-index: 10; white-space: nowrap; }
+#tip b { font-weight: 650; }
+#tip .r { display: flex; justify-content: space-between; gap: 16px; }
+#tip .r span:first-child { color: var(--ink2); }
+#tip i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; }
+details { margin-top: 12px; }
+summary { cursor: pointer; font-size: 13px; color: var(--ink2); }
+.tablewrap { overflow-x: auto; margin-top: 8px; }
+table { border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; width: 100%; }
+th, td { padding: 5px 10px; text-align: right; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th { color: var(--ink2); font-weight: 600; }
+.empty { color: var(--muted); font-size: 13px; padding: 24px 0; text-align: center; }
+footer { margin-top: 24px; font-size: 12px; color: var(--muted); }
+footer p { margin: 4px 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>종로3가 생활인구 기록</h1>
+  <p class="sub" id="status">데이터를 불러오는 중입니다.</p>
+
+  <div class="filters">
+    <label>지역 <select id="area"></select></label>
+    <label>날짜 <input type="date" id="date"></label>
+    <div class="nav">
+      <button id="prev" aria-label="이전 날짜">‹ 이전</button>
+      <button id="next" aria-label="다음 날짜">다음 ›</button>
+    </div>
+  </div>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="cards">
+    <section class="card wide">
+      <h2>시간대별 생활인구</h2>
+      <p class="desc" id="hourDesc"></p>
+      <div class="legend" id="hourLegend"></div>
+      <div id="hourChart"></div>
+    </section>
+    <section class="card">
+      <h2>시간대별 여성 비율</h2>
+      <p class="desc">50% 선보다 위면 여성이, 아래면 남성이 더 많습니다.</p>
+      <div id="sexChart"></div>
+    </section>
+    <section class="card">
+      <h2>연령대별 인구</h2>
+      <div class="hourpick"><span id="hourLabel"></span><input type="range" id="hour" min="0" max="23" step="1" aria-label="시간 선택"></div>
+      <div class="legend"><span><i class="box" style="background:var(--s1)"></i>남성</span><span><i class="box" style="background:var(--s2)"></i>여성</span></div>
+      <div id="ageChart"></div>
+    </section>
+    <section class="card wide">
+      <h2>날짜별 정점 인구</h2>
+      <p class="desc">하루 중 인구가 가장 많았던 시간의 값입니다. 큰 점이 지금 보고 있는 날짜이고, 그래프를 누르면 그 날짜로 이동합니다.</p>
+      <div id="dayChart"></div>
+    </section>
+  </div>
+
+  <details>
+    <summary>표로 보기</summary>
+    <div class="tablewrap" id="table"></div>
+  </details>
+
+  <footer>
+    <p>출처: 서울 열린데이터광장(서울특별시), 서울 생활인구(250m) 내국인. 공공누리 제1유형.</p>
+    <p>내국인만 집계된 추계 인구이며 약 4일 늦게 공개됩니다. 격자는 250m × 250m 단위라 특정 거리만의 수치는 아닙니다.</p>
+  </footer>
+</main>
+<div id="tip" role="status"></div>
+
+<script>
+const AGES = ['00','10','15','20','25','30','35','40','45','50','55','60','65','70'];
+const BANDS = [['19세 이하',['00','10','15']],['20대',['20','25']],['30대',['30','35']],['40대',['40','45']],['50대',['50','55']],['60세 이상',['60','65','70']]];
+const DOW = ['일','월','화','수','목','금','토'];
+const $ = (id) => document.getElementById(id);
+const fmt = (n) => Math.round(n).toLocaleString('ko-KR');
+const pct = (n) => n.toFixed(1) + '%';
+const ymdDash = (s) => s.slice(0,4) + '-' + s.slice(4,6) + '-' + s.slice(6);
+const dowOf = (s) => new Date(ymdDash(s) + 'T00:00:00').getDay();
+const dateLabel = (s) => `${+s.slice(4,6)}월 ${+s.slice(6)}일(${DOW[dowOf(s)]})`;
+
+const store = {};   // areaId -> { ymd -> [24 rows|undefined] }
+let areas = [], state = { area: null, date: null, hour: null };
+
+function parseCsv(text) {
+  const lines = text.trim().split('\n');
+  const head = lines[0].split(',');
+  return lines.slice(1).map((l) => {
+    const f = l.split(','), o = { ymd: f[0], tt: +f[1], id: f[2], spop: +f[3] || 0, m: 0, f: 0, age: {} };
+    for (let i = 4; i < head.length; i++) {
+      const v = +f[i] || 0, k = head[i];
+      o.age[k] = v;
+      if (k[0] === 'm') o.m += v; else o.f += v;
+    }
+    return o;
+  });
+}
+function put(id, row) { ((store[id] ??= {})[row.ymd] ??= [])[row.tt] = row; }
+function addRows(a, b) {
+  const o = { ymd: a.ymd, tt: a.tt, spop: a.spop + b.spop, m: a.m + b.m, f: a.f + b.f, age: {} };
+  for (const k in a.age) o.age[k] = a.age[k] + (b.age[k] || 0);
+  return o;
+}
+
+async function load() {
+  const get = (f) => fetch('data/' + f, { cache: 'no-cache' }).then((r) => (r.ok ? r.text() : ''));
+  const [cfg, dong, cell, meta] = await Promise.all([get('areas.json'), get('dong.csv'), get('cell.csv'), get('meta.json')]);
+  const a = JSON.parse(cfg);
+  if (dong) parseCsv(dong).forEach((r) => put(r.id, r));
+  if (cell) parseCsv(cell).forEach((r) => put(r.id, r));
+  for (const g of a.groups || []) {
+    const parts = g.cells.map((c) => store[c] || {});
+    for (const ymd of Object.keys(parts[0])) {
+      if (!parts.every((p) => p[ymd])) continue;
+      for (let h = 0; h < 24; h++) {
+        const rows = parts.map((p) => p[ymd][h]);
+        if (rows.every(Boolean)) put(g.id, { ...rows.reduce(addRows), ymd, tt: h });
+      }
+    }
+  }
+  areas = [...(a.groups || []), ...a.cells, ...a.dongs].filter((x) => store[x.id]);
+  $('area').innerHTML = areas.map((x) => `<option value="${x.id}">${x.label}</option>`).join('');
+  const m = meta ? JSON.parse(meta) : null;
+  $('status').textContent = m
+    ? `마지막 수집 ${new Date(m.updatedAt).toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'short' })} · 행정동 ${m.dong?.days ?? 0}일 치, 격자 ${m.cell?.days ?? 0}일 치 보관 중`
+    : '';
+  state.area = areas[0]?.id;
+  state.date = dates().at(-1);
+  render();
+}
+
+const dates = () => Object.keys(store[state.area] || {}).sort();
+const day = (ymd) => (store[state.area]?.[ymd] || []);
+const peakOf = (rows) => rows.reduce((b, r) => (r && (!b || r.spop > b.spop) ? r : b), null);
+
+// ---------- 차트 공통 ----------
+const NS = 'http://www.w3.org/2000/svg';
+function el(tag, attrs = {}, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function niceTicks(v) {
+  if (!(v > 0)) return [0, 1];
+  const raw = v / 4, p = 10 ** Math.floor(Math.log10(raw)), n = raw / p;
+  const step = (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * p;
+  const out = [];
+  for (let t = 0; t < v + step - 1e-9; t += step) out.push(t);
+  return out;
+}
+const tip = $('tip');
+function showTip(ev, html) {
+  tip.innerHTML = html; tip.style.display = 'block';
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  let x = ev.clientX + 14, y = ev.clientY - h - 10;
+  if (x + w > innerWidth - 8) x = ev.clientX - w - 14;
+  if (y < 8) y = ev.clientY + 14;
+  tip.style.left = x + 'px'; tip.style.top = y + 'px';
+}
+const hideTip = () => (tip.style.display = 'none');
+const tipRow = (color, name, val) => `<div class="r"><span>${color ? `<i style="background:${color}"></i>` : ''}${name}</span><b>${val}</b></div>`;
+
+function frame(host, { W = 720, H = 260, ml = 52, mr = 16, mt = 12, mb = 28 } = {}) {
+  host.innerHTML = '';
+  // 좁은 화면에서는 좌표계를 실제 너비에 맞춰 글자가 작아지지 않게 한다
+  W = Math.max(320, Math.min(W, host.clientWidth || W));
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img' }, host);
+  return { svg, W, H, x0: ml, x1: W - mr, y0: mt, y1: H - mb };
+}
+function yAxis(f, min, max, ticks, label) {
+  const y = (v) => f.y1 - ((v - min) / (max - min)) * (f.y1 - f.y0);
+  for (const t of ticks) {
+    el('line', { x1: f.x0, x2: f.x1, y1: y(t), y2: y(t), stroke: t === min ? 'var(--axis)' : 'var(--grid)', 'stroke-width': 1 }, f.svg);
+    el('text', { x: f.x0 - 8, y: y(t) + 4, 'text-anchor': 'end' }, f.svg).textContent = label(t);
+  }
+  return y;
+}
+function hourAxis(f) {
+  const x = (h) => f.x0 + (h / 23) * (f.x1 - f.x0);
+  for (let h = 0; h < 24; h += 3) el('text', { x: x(h), y: f.y1 + 18, 'text-anchor': 'middle' }, f.svg).textContent = h + '시';
+  return x;
+}
+function path(f, pts, color, dashed) {
+  let d = '', pen = false;
+  for (const p of pts) { if (!p) { pen = false; continue; } d += (pen ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1); pen = true; }
+  return el('path', { d, fill: 'none', stroke: color, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round', ...(dashed ? { 'stroke-dasharray': '5 4' } : {}) }, f.svg);
+}
+// 세로 기준선 + 가장 가까운 x 위치를 잡아 주는 호버 레이어
+function crosshair(f, xs, onMove, onClick) {
+  const line = el('line', { y1: f.y0, y2: f.y1, stroke: 'var(--axis)', 'stroke-width': 1, visibility: 'hidden' }, f.svg);
+  const dots = el('g', {}, f.svg);
+  const hit = el('rect', { x: f.x0 - 8, y: f.y0, width: f.x1 - f.x0 + 16, height: f.y1 - f.y0, fill: 'transparent' }, f.svg);
+  const nearest = (ev) => {
+    const r = f.svg.getBoundingClientRect(), px = ((ev.clientX - r.left) / r.width) * f.W;
+    let best = 0;
+    xs.forEach((x, i) => { if (Math.abs(x - px) < Math.abs(xs[best] - px)) best = i; });
+    return best;
+  };
+  hit.addEventListener('pointermove', (ev) => {
+    const i = nearest(ev);
+    line.setAttribute('x1', xs[i]); line.setAttribute('x2', xs[i]); line.setAttribute('visibility', 'visible');
+    dots.innerHTML = '';
+    const r = onMove(i);
+    if (!r) return hideTip();
+    for (const [y, c] of r.marks) el('circle', { cx: xs[i], cy: y, r: 4, fill: c, stroke: 'var(--surface)', 'stroke-width': 2 }, dots);
+    showTip(ev, r.html);
+  });
+  hit.addEventListener('pointerleave', () => { line.setAttribute('visibility', 'hidden'); dots.innerHTML = ''; hideTip(); });
+  if (onClick) { hit.style.cursor = 'pointer'; hit.addEventListener('click', (ev) => onClick(nearest(ev))); }
+}
+
+// ---------- 화면 ----------
+function baseline(ymd) {
+  // 같은 요일의 다른 날짜 평균
+  const others = dates().filter((d) => d !== ymd && dowOf(d) === dowOf(ymd));
+  if (!others.length) return null;
+  const avg = [];
+  for (let h = 0; h < 24; h++) {
+    const v = others.map((d) => day(d)[h]?.spop).filter((x) => x != null);
+    avg[h] = v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
+  }
+  return { avg, n: others.length };
+}
+
+function render() {
+  const ds = dates();
+  if (!ds.includes(state.date)) state.date = ds.at(-1);
+  const rows = day(state.date), peak = peakOf(rows), base = baseline(state.date);
+  if (state.hour == null && peak) state.hour = peak.tt;
+  $('area').value = state.area;
+  $('date').min = ymdDash(ds[0]); $('date').max = ymdDash(ds.at(-1)); $('date').value = ymdDash(state.date);
+  const i = ds.indexOf(state.date);
+  $('prev').disabled = i <= 0; $('next').disabled = i >= ds.length - 1;
+
+  // 요약 타일
+  const tiles = [];
+  if (peak) {
+    tiles.push(['정점 인구', fmt(peak.spop) + '명', `${dateLabel(state.date)} ${peak.tt}시`]);
+    const b = base?.avg[peak.tt];
+    if (b) {
+      const diff = (peak.spop / b - 1) * 100;
+      tiles.push([`${DOW[dowOf(state.date)]}요일 평균 대비`, (diff >= 0 ? '+' : '−') + Math.abs(diff).toFixed(1) + '%', `같은 요일 ${base.n}일 평균 ${fmt(b)}명 (${peak.tt}시)`]);
+    } else tiles.push(['같은 요일 평균 대비', '—', '비교할 같은 요일 데이터가 아직 없습니다']);
+    tiles.push(['정점 시각 여성 비율', pct((peak.f / (peak.m + peak.f)) * 100), `남성 ${fmt(peak.m)}명 · 여성 ${fmt(peak.f)}명`]);
+    const night = rows[21];
+    if (night) tiles.push(['21시 인구', fmt(night.spop) + '명', `여성 ${pct((night.f / (night.m + night.f)) * 100)}`]);
+  }
+  $('tiles').innerHTML = tiles.map(([k, v, n]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="n">${n}</div></div>`).join('');
+
+  drawHour(rows, base, peak);
+  drawSex(rows);
+  drawAge(rows);
+  drawDays(ds);
+  drawTable(rows, base);
+}
+
+function drawHour(rows, base, peak) {
+  const host = $('hourChart');
+  $('hourDesc').textContent = base ? `${dateLabel(state.date)}과 다른 ${DOW[dowOf(state.date)]}요일 ${base.n}일의 평균을 비교합니다.` : `${dateLabel(state.date)} 하루의 흐름입니다. 같은 요일 데이터가 쌓이면 평균선이 함께 표시됩니다.`;
+  $('hourLegend').innerHTML = `<span><i style="border-color:var(--s1)"></i>${dateLabel(state.date)}</span>` + (base ? `<span><i class="dash" style="border-color:var(--ref)"></i>${DOW[dowOf(state.date)]}요일 평균 (${base.n}일)</span>` : '');
+  if (!peak) return (host.innerHTML = '<p class="empty">이 날짜의 데이터가 없습니다.</p>');
+  const f = frame(host);
+  const ticks = niceTicks(Math.max(peak.spop, ...(base ? base.avg.map((v) => v || 0) : [0])));
+  const y = yAxis(f, 0, ticks.at(-1), ticks, fmt), x = hourAxis(f);
+  if (base) path(f, base.avg.map((v, h) => (v == null ? null : [x(h), y(v)])), 'var(--ref)', true);
+  path(f, Array.from({ length: 24 }, (_, h) => (rows[h] ? [x(h), y(rows[h].spop)] : null)), 'var(--s1)');
+  el('circle', { cx: x(peak.tt), cy: y(peak.spop), r: 4, fill: 'var(--s1)', stroke: 'var(--surface)', 'stroke-width': 2 }, f.svg);
+  const anchor = peak.tt > 19 ? 'end' : peak.tt < 4 ? 'start' : 'middle';
+  el('text', { x: x(peak.tt), y: y(peak.spop) - 10, 'text-anchor': anchor, class: 'lbl' }, f.svg).textContent = `${peak.tt}시 ${fmt(peak.spop)}명`;
+  crosshair(f, Array.from({ length: 24 }, (_, h) => x(h)), (h) => {
+    const r = rows[h]; if (!r) return null;
+    const b = base?.avg[h];
+    return { marks: [[y(r.spop), 'var(--s1)'], ...(b != null ? [[y(b), 'var(--ref)']] : [])],
+      html: `<b>${h}시</b>` + tipRow('var(--s1)', dateLabel(state.date), fmt(r.spop) + '명') + (b != null ? tipRow('var(--ref)', '요일 평균', fmt(b) + '명') + tipRow('', '차이', ((r.spop / b - 1) * 100 >= 0 ? '+' : '−') + Math.abs((r.spop / b - 1) * 100).toFixed(1) + '%') : '') };
+  }, (h) => { state.hour = h; render(); });
+}
+
+function drawSex(rows) {
+  const host = $('sexChart');
+  const share = Array.from({ length: 24 }, (_, h) => (rows[h] && rows[h].m + rows[h].f > 0 ? (rows[h].f / (rows[h].m + rows[h].f)) * 100 : null));
+  if (share.every((v) => v == null)) return (host.innerHTML = '<p class="empty">데이터가 없습니다.</p>');
+  const f = frame(host, { W: 520, H: 240, ml: 40 });
+  const vals = share.filter((v) => v != null);
+  const lo = Math.min(30, Math.floor(Math.min(...vals) / 10) * 10), hi = Math.max(70, Math.ceil(Math.max(...vals) / 10) * 10);
+  const ticks = []; for (let t = lo; t <= hi; t += 10) ticks.push(t);
+  const y = yAxis(f, lo, hi, ticks, (t) => t + '%'), x = hourAxis(f);
+  el('line', { x1: f.x0, x2: f.x1, y1: y(50), y2: y(50), stroke: 'var(--axis)', 'stroke-width': 1.5 }, f.svg);
+  path(f, share.map((v, h) => (v == null ? null : [x(h), y(v)])), 'var(--s2)');
+  crosshair(f, Array.from({ length: 24 }, (_, h) => x(h)), (h) => {
+    if (share[h] == null) return null;
+    return { marks: [[y(share[h]), 'var(--s2)']], html: `<b>${h}시</b>` + tipRow('var(--s2)', '여성', pct(share[h])) + tipRow('var(--s1)', '남성', pct(100 - share[h])) };
+  }, (h) => { state.hour = h; render(); });
+}
+
+function drawAge(rows) {
+  const host = $('ageChart'), r = rows[state.hour];
+  $('hour').value = state.hour ?? 0;
+  $('hourLabel').textContent = `${state.hour ?? 0}시 기준`;
+  if (!r) return (host.innerHTML = '<p class="empty">데이터가 없습니다.</p>');
+  const bands = BANDS.map(([name, keys]) => ({ name, m: keys.reduce((s, k) => s + (r.age['m' + k] || 0), 0), f: keys.reduce((s, k) => s + (r.age['f' + k] || 0), 0) }));
+  const f = frame(host, { W: 520, H: 222, ml: 48 });
+  const ticks = niceTicks(Math.max(...bands.flatMap((b) => [b.m, b.f])));
+  const y = yAxis(f, 0, ticks.at(-1), ticks, fmt);
+  const slot = (f.x1 - f.x0) / bands.length, bw = Math.min(26, slot / 2 - 8);
+  bands.forEach((b, i) => {
+    const cx = f.x0 + slot * (i + .5);
+    [['m', 'var(--s1)', cx - bw - 1], ['f', 'var(--s2)', cx + 1]].forEach(([k, c, bx]) => {
+      const top = y(b[k]), h = f.y1 - top, rr = Math.min(4, h);
+      el('path', { d: `M${bx} ${f.y1}V${top + rr}q0 ${-rr} ${rr} ${-rr}h${bw - 2 * rr}q${rr} 0 ${rr} ${rr}V${f.y1}Z`, fill: c }, f.svg);
+    });
+    el('text', { x: cx, y: f.y1 + 18, 'text-anchor': 'middle' }, f.svg).textContent = b.name;
+    const hit = el('rect', { x: f.x0 + slot * i, y: f.y0, width: slot, height: f.y1 - f.y0, fill: 'transparent' }, f.svg);
+    const tot = b.m + b.f;
+    hit.addEventListener('pointermove', (ev) => showTip(ev, `<b>${b.name} · ${state.hour}시</b>` + tipRow('var(--s1)', '남성', fmt(b.m) + '명') + tipRow('var(--s2)', '여성', fmt(b.f) + '명') + tipRow('', '전체 중 비중', pct((tot / (r.m + r.f)) * 100))));
+    hit.addEventListener('pointerleave', hideTip);
+  });
+}
+
+function drawDays(ds) {
+  const host = $('dayChart');
+  const peaks = ds.map((d) => peakOf(day(d)));
+  if (ds.length < 2) return (host.innerHTML = `<p class="empty">아직 ${ds.length}일 치만 있습니다. 수집이 쌓이면 날짜별 추이가 표시됩니다.</p>`);
+  const f = frame(host, { H: 220 });
+  const ticks = niceTicks(Math.max(...peaks.map((p) => p?.spop || 0)));
+  const y = yAxis(f, 0, ticks.at(-1), ticks, fmt);
+  const x = (i) => f.x0 + (i / (ds.length - 1)) * (f.x1 - f.x0);
+  const step = Math.ceil(ds.length / 8);
+  ds.forEach((d, i) => { if (i % step === 0) el('text', { x: x(i), y: f.y1 + 18, 'text-anchor': i === 0 ? 'start' : 'middle' }, f.svg).textContent = `${+d.slice(4, 6)}/${+d.slice(6)}`; });
+  path(f, peaks.map((p, i) => (p ? [x(i), y(p.spop)] : null)), 'var(--s1)');
+  const si = ds.indexOf(state.date);
+  if (peaks[si]) el('circle', { cx: x(si), cy: y(peaks[si].spop), r: 5, fill: 'var(--s1)', stroke: 'var(--surface)', 'stroke-width': 2 }, f.svg);
+  crosshair(f, ds.map((_, i) => x(i)), (i) => {
+    const p = peaks[i]; if (!p) return null;
+    return { marks: [[y(p.spop), 'var(--s1)']], html: `<b>${dateLabel(ds[i])}</b>` + tipRow('var(--s1)', '정점', fmt(p.spop) + '명') + tipRow('', '시각', p.tt + '시') };
+  }, (i) => { state.date = ds[i]; state.hour = null; render(); });
+}
+
+function drawTable(rows, base) {
+  let h = '<table><thead><tr><th>시</th><th>인구(명)</th>' + (base ? '<th>요일 평균(명)</th><th>차이</th>' : '') + '<th>남성</th><th>여성</th></tr></thead><tbody>';
+  for (let t = 0; t < 24; t++) {
+    const r = rows[t]; if (!r) continue;
+    const b = base?.avg[t], d = b ? (r.spop / b - 1) * 100 : null;
+    h += `<tr><td>${t}</td><td>${fmt(r.spop)}</td>` + (base ? `<td>${b ? fmt(b) : '—'}</td><td>${d == null ? '—' : (d >= 0 ? '+' : '−') + Math.abs(d).toFixed(1) + '%'}</td>` : '') + `<td>${pct((r.m / (r.m + r.f)) * 100)}</td><td>${pct((r.f / (r.m + r.f)) * 100)}</td></tr>`;
+  }
+  $('table').innerHTML = h + '</tbody></table>';
+}
+
+$('area').addEventListener('change', (e) => { state.area = e.target.value; state.hour = null; render(); });
+$('date').addEventListener('change', (e) => {
+  const want = e.target.value.replaceAll('-', ''), ds = dates();
+  if (!want) return render();
+  state.date = ds.includes(want) ? want : ds.reduce((a, b) => (Math.abs(+b - +want) < Math.abs(+a - +want) ? b : a));
+  state.hour = null; render();
+});
+$('prev').addEventListener('click', () => { const ds = dates(); state.date = ds[ds.indexOf(state.date) - 1]; state.hour = null; render(); });
+$('next').addEventListener('click', () => { const ds = dates(); state.date = ds[ds.indexOf(state.date) + 1]; state.hour = null; render(); });
+$('hour').addEventListener('input', (e) => { state.hour = +e.target.value; drawAge(day(state.date)); });
+
+let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => state.area && render(), 150); });
+
+load().catch((e) => { $('status').textContent = '데이터를 불러오지 못했습니다: ' + e.message; });
+</script>
+</body>
+</html>

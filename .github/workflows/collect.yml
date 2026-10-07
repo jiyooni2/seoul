@@ -1,0 +1,44 @@
+name: 생활인구 수집
+
+on:
+  schedule:
+    # GitHub Actions의 cron은 UTC 기준입니다. 하루 두 번 돌려 하루치를 놓치지 않게 합니다.
+    - cron: '17 9 * * *'   # 한국 시간 18:17
+    - cron: '17 21 * * *'  # 한국 시간 06:17
+  workflow_dispatch:        # Actions 탭에서 수동 실행 버튼
+
+permissions:
+  contents: write
+
+concurrency:
+  group: collect
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 데이터 수집
+        run: node scripts/collect.mjs
+        env:
+          SEOUL_API_KEY: ${{ secrets.SEOUL_API_KEY }}
+
+      - name: 변경분 커밋
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/data
+          if git diff --cached --quiet; then
+            echo "변경 없음"
+          else
+            git commit -m "data: $(TZ=Asia/Seoul date +%F) 수집"
+            git push
+          fi
