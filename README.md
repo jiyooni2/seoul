@@ -42,7 +42,7 @@ npx serve docs                                      # 사이트 미리보기
 
 ## 지도
 
-- 지도 라이브러리는 Leaflet(`docs/vendor/`), 배경 지도는 OpenStreetMap·CARTO 타일을 씁니다.
+- 지도 라이브러리는 Leaflet(`docs/vendor/`), 배경 지도는 OpenStreetMap 표준 타일을 씁니다(API 키 불필요).
 - 핫플의 지도 위치와 격자 테두리는 `areas.json`의 `center`, `boxes`에 들어 있습니다(격자 ID에서 계산한 값).
 - 행정동 경계(`docs/data/dongs.geojson`)는 [vuski/admdongkor](https://github.com/vuski/admdongkor)에서 가져와 단순화했습니다.
 

@@ -181,7 +181,7 @@ footer p { margin: 4px 0; }
 
   <footer>
     <p>출처: 서울 열린데이터광장(서울특별시), 서울 생활인구(250m) 내국인. 공공누리 제1유형.</p>
-    <p>지도: © OpenStreetMap contributors, © CARTO. 행정동 경계: vuski/admdongkor.</p>
+    <p>지도: © OpenStreetMap contributors. 행정동 경계: vuski/admdongkor.</p>
     <p>내국인만 집계된 추계 인구이며 약 4일 늦게 공개됩니다. 핫플 수치는 중심점 주변 250m 격자 1~4개를 합친 값이라 특정 거리만의 수치는 아닙니다.</p>
   </footer>
 </main>
@@ -479,9 +479,10 @@ function initMap() {
   $('scale').style.background = `linear-gradient(90deg, ${rgb(PAL.m)}, ${rgb(PAL.mid)}, ${rgb(PAL.f)})`;
   if (!window.L) return ($('map').innerHTML = '<p class="empty">지도를 불러오지 못했습니다. 아래 지역 비교 표를 이용해 주세요.</p>');
   map = L.map('map', { scrollWheelZoom: false, zoomSnap: 0.5 });
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-    maxZoom: 18, subdomains: 'abcd',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+  // 키 없이 쓸 수 있는 OpenStreetMap 표준 타일
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   }).addTo(map);
   // 페이지를 스크롤하다 지도가 확대되지 않도록, 지도를 한 번 누른 뒤에만 휠 확대를 켠다
   map.on('click', () => map.scrollWheelZoom.enable());
