@@ -30,7 +30,14 @@ h1 { font-size: 22px; margin: 0 0 4px; }
 .filters label { display: grid; gap: 4px; font-size: 12px; color: var(--ink2); }
 select, input[type=date] { font: inherit; color: var(--ink); background: var(--surface);
   border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; min-width: 0; max-width: 100%; }
-.nav { display: flex; gap: 6px; }
+.field { display: grid; gap: 4px; font-size: 12px; color: var(--ink2); }
+.step { display: inline-flex; align-items: stretch; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); overflow: hidden; }
+.step > * { border: 0; border-radius: 0; background: transparent; font-size: 15px; }
+.step button { padding: 7px 12px; font-size: 16px; line-height: 1; }
+.step button:not(:disabled):hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.step input[type=date], .step select { padding: 7px 6px; border: 0; border-radius: 0; background: transparent; }
+.step .dow { display: inline-flex; align-items: center; padding: 0 10px 0 2px; color: var(--ink); font-weight: 600; white-space: nowrap; }
+.step .dow.sat { color: var(--s1); } .step .dow.sun { color: #d03b3b; }
 button { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--border);
   border-radius: 8px; padding: 7px 12px; cursor: pointer; }
 button:disabled { opacity: .4; cursor: default; }
@@ -126,12 +133,22 @@ footer p { margin: 4px 0; }
 
   <div class="filters">
     <label>지역 <select id="area"></select></label>
-    <label>날짜 <input type="date" id="date"></label>
-    <label>기준 시각 <select id="mapHour"></select></label>
-    <div class="nav">
-      <button id="prev" aria-label="이전 날짜">‹ 이전</button>
-      <button id="next" aria-label="다음 날짜">다음 ›</button>
+    <div class="field"><span>날짜</span>
+      <div class="step">
+        <button id="prev" type="button" aria-label="이전 날짜">‹</button>
+        <input type="date" id="date" aria-label="날짜">
+        <span id="dow" class="dow"></span>
+        <button id="next" type="button" aria-label="다음 날짜">›</button>
+      </div>
     </div>
+    <div class="field"><span>기준 시각</span>
+      <div class="step">
+        <button id="hPrev" type="button" aria-label="한 시간 전">‹</button>
+        <select id="mapHour" aria-label="기준 시각"></select>
+        <button id="hNext" type="button" aria-label="한 시간 뒤">›</button>
+      </div>
+    </div>
+  </div>
   </div>
 
   <section class="card mapcard">
@@ -346,6 +363,9 @@ function render() {
   $('date').min = ymdDash(ds[0]); $('date').max = ymdDash(ds.at(-1)); $('date').value = ymdDash(state.date);
   const i = ds.indexOf(state.date);
   $('prev').disabled = i <= 0; $('next').disabled = i >= ds.length - 1;
+  const w = dowOf(state.date);
+  $('dow').textContent = DOW[w] + '요일'; $('dow').className = 'dow' + (w === 6 ? ' sat' : w === 0 ? ' sun' : '');
+  $('hPrev').disabled = state.hour <= 0; $('hNext').disabled = state.hour >= 23;
 
   // 요약 타일
   const tiles = [], H = state.hour, ref = rows[H];
@@ -593,6 +613,15 @@ $('date').addEventListener('change', (e) => {
 });
 $('prev').addEventListener('click', () => { const ds = dates(); state.date = ds[ds.indexOf(state.date) - 1]; render(); });
 $('next').addEventListener('click', () => { const ds = dates(); state.date = ds[ds.indexOf(state.date) + 1]; render(); });
+$('hPrev').addEventListener('click', () => { state.hour = Math.max(0, state.hour - 1); render(); });
+$('hNext').addEventListener('click', () => { state.hour = Math.min(23, state.hour + 1); render(); });
+// 입력 칸 밖에서는 방향키로도 넘긴다: ←→ 날짜, ↑↓ 기준 시각
+addEventListener('keydown', (e) => {
+  if (e.altKey || e.ctrlKey || e.metaKey || /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName || '')) return;
+  const btn = { ArrowLeft: 'prev', ArrowRight: 'next', ArrowDown: 'hPrev', ArrowUp: 'hNext' }[e.key];
+  if (!btn || $(btn).disabled) return;
+  e.preventDefault(); $(btn).click();
+});
 $('hour').addEventListener('input', (e) => { state.hour = +e.target.value; render(); });
 
 let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => state.area && render(), 150); });
